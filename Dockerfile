@@ -14,19 +14,20 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/tracker
 
 FROM alpine:3.21
 
-# rclone mirrors the cloud folder; tzdata is required because the reporting
-# timezone is configured explicitly and looked up by IANA name.
-RUN apk add --no-cache ca-certificates tzdata rclone wget \
+# rclone mirrors the cloud folder, tzdata is required because the reporting
+# timezone is looked up by IANA name, and su-exec lets the entrypoint drop
+# privileges after preparing the data directory.
+RUN apk add --no-cache ca-certificates tzdata rclone wget su-exec \
  && adduser -D -u 10001 tracker \
  && mkdir -p /data \
  && chown -R tracker:tracker /data
 
 COPY --from=build /out/tracker /usr/local/bin/tracker
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
-# Runs as UID 10001. Deployment uses a host bind mount, whose ownership comes
-# from the host rather than from this image, so the mounted directory must be
-# owned by this UID; see the deployment section of the README.
-USER tracker
+# The container starts as root only long enough to hand the data directory to
+# uid 10001, which a bind mount from the host will not have done, and then drops
+# to that user. The tracker process itself never runs as root.
 WORKDIR /data
 EXPOSE 8381
 
@@ -37,4 +38,5 @@ ENV DATA_DIR=/data \
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget -qO- http://127.0.0.1:8381/healthz || exit 1
 
-ENTRYPOINT ["/usr/local/bin/tracker"]
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+CMD ["/usr/local/bin/tracker"]

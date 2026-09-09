@@ -139,15 +139,7 @@ instants are always stored, so switching is just a recompute.
 Point Coolify at this repository and let it build the Dockerfile — there is
 nothing else to build.
 
-**Storage.** Create the directory on the server first and give it to the user the
-container runs as (UID 10001):
-
-```sh
-sudo mkdir -p /mnt/storage/apps/route-tracker
-sudo chown -R 10001:10001 /mnt/storage/apps/route-tracker
-```
-
-Then in Coolify add a **persistent storage** entry of type *bind mount*:
+**Storage.** In Coolify add a **persistent storage** entry of type *bind mount*:
 
 | | |
 |---|---|
@@ -158,11 +150,20 @@ That directory ends up holding `tracker.db`, `inbox/` (recordings pulled from
 the cloud folder) and `gpx/` (the retained originals). Backing it up is copying
 it; a SQLite database copied while the tracker is idle is a complete backup.
 
-The `chown` is not optional and is easy to miss. A bind mount keeps the *host's*
-ownership, so unlike a named volume it ignores the ownership set up inside the
-image — without it the container cannot write and refuses to start. The error
-message names the directory and the exact command to fix it, so if the container
-will not come up, read the first log line before anything else.
+Nothing needs preparing on the server by hand. A bind mount keeps the *host's*
+ownership rather than taking the image's, so a freshly created host directory
+belongs to root and the tracker's unprivileged user could not write to it; the
+container therefore starts as root only long enough to hand the directory over,
+then drops to that user. The tracker process itself never runs as root.
+
+If the directory somehow cannot be handed over, the container says so and stops
+rather than starting in a broken state, naming the directory and the command
+that fixes it:
+
+```
+data directory /data is not writable by uid 10001;
+if it is a bind mount, run: chown -R 10001:10001 /data
+```
 
 **Environment.** Set these in Coolify's environment panel, not in the repository:
 
