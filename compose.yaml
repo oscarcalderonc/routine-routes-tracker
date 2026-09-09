@@ -1,0 +1,18 @@
+# For running the tracker locally. Coolify builds the Dockerfile directly and
+# does not use this file.
+services:
+  tracker:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      APP_TZ: Europe/Warsaw
+      # Leave the drive settings unset to work purely from ./data/inbox.
+      # DRIVE_REMOTE: gdrive
+      # DRIVE_FOLDER: gpx
+      # RCLONE_CONFIG_B64: ...
+    volumes:
+      - tracker-data:/data
+
+volumes:
+  tracker-data:

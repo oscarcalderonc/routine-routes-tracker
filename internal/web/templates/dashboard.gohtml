@@ -1,0 +1,84 @@
+{{define "content"}}
+<h1>Dashboard</h1>
+
+{{if not .RouteDefined}}
+<section class="card notice">
+  <h2>Define the route first</h2>
+  <p>
+    Measurements need at least two waypoints. Add them on the
+    <a href="/route">route page</a>, placing each one on a road you actually
+    drive rather than at your front door — a waypoint at home measures how long
+    you spent finding your phone, not how long the drive took.
+  </p>
+</section>
+{{end}}
+
+<section class="card">
+  <div class="row between">
+    <div>
+      <h2>Recordings</h2>
+      <p class="muted">
+        {{if .DriveConfigured}}
+          Pulls new files from the configured cloud folder, then measures them.
+        {{else}}
+          No cloud folder configured; files placed in the inbox directory are picked up.
+        {{end}}
+        {{if not .LastRefresh.IsZero}}Last import {{datetime .LastRefresh}}.{{end}}
+      </p>
+    </div>
+    <button hx-post="/refresh" hx-target="#refresh-status" hx-swap="outerHTML" class="primary">
+      Refresh
+    </button>
+  </div>
+  {{template "refresh-status" (dict "Progress" .Progress "Poll" .Progress.Running)}}
+</section>
+
+<section class="stat-row">
+  <div class="stat"><span class="value">{{.Report.TotalTrips}}</span><span class="label">trips in range</span></div>
+  <div class="stat"><span class="value">{{index .Counts "matched"}}</span><span class="label">fully matched</span></div>
+  <div class="stat"><span class="value">{{index .Counts "partial"}}</span><span class="label">partial</span></div>
+  <div class="stat"><span class="value">{{index .Counts "unmatched"}}</span><span class="label">unmatched</span></div>
+  {{if hasData .Stale}}
+  <div class="stat warn"><span class="value">{{.Stale}}</span><span class="label">awaiting recompute</span></div>
+  {{end}}
+</section>
+
+{{if .Report.Segments}}
+<section class="card">
+  <h2>Typical time by stretch</h2>
+  <p class="muted">
+    Both directions pooled. Times are medians over {{.From}} to {{.To}}, reported in {{.Location}}.
+  </p>
+  <table>
+    <thead>
+      <tr><th>Stretch</th><th>Median</th><th>Fastest</th><th>Slowest</th><th>Congestion</th><th>Trips</th></tr>
+    </thead>
+    <tbody>
+    {{range .Report.Segments}}
+      <tr>
+        <td>{{.Label}}</td>
+        <td class="num strong">{{duration .Duration.Median}}</td>
+        <td class="num">{{duration .Duration.Min}}</td>
+        <td class="num">{{duration .Duration.Max}}</td>
+        <td class="num">{{if .CongestionIndex}}{{round2 .CongestionIndex}}×{{else}}—{{end}}</td>
+        <td class="num">{{.Duration.Count}}</td>
+      </tr>
+    {{end}}
+    </tbody>
+  </table>
+  <p class="muted small">
+    Congestion compares the median with the fastest this stretch has ever been driven:
+    1.00× means it always runs freely.
+  </p>
+</section>
+{{end}}
+
+<section class="card">
+  <h2>Recent trips</h2>
+  {{if .Trips}}
+  {{template "trip-table" .Trips}}
+  {{else}}
+  <p class="muted">Nothing imported yet.</p>
+  {{end}}
+</section>
+{{end}}

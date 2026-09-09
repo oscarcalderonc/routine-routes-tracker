@@ -1,0 +1,28 @@
+{{define "refresh-status"}}
+{{$p := .Progress}}
+<div id="refresh-status"
+     {{if .Poll}}hx-get="/refresh/status" hx-trigger="every 1s" hx-swap="outerHTML"{{end}}>
+  {{if $p.Running}}
+    <p class="status running">Checking for new recordings… {{$p.Done}} of {{$p.Total}}</p>
+  {{else if not $p.StartedAt.IsZero}}
+    <p class="status done">
+      Finished {{datetime $p.FinishedAt}} — {{$p.Total}} new file{{if ne $p.Total 1}}s{{end}}.
+    </p>
+  {{end}}
+
+  {{if $p.Err}}<p class="status error">{{$p.Err}}</p>{{end}}
+
+  {{if $p.Outcomes}}
+  <ul class="outcomes">
+    {{range $p.Outcomes}}
+      <li class="outcome {{.Status}}">
+        <code>{{.Filename}}</code>
+        <span class="badge {{.Status}}">{{.Status}}</span>
+        {{if .Detail}}<span class="detail">{{.Detail}}</span>{{end}}
+        {{if .TripID}}<a href="/trips/{{.TripID}}">view</a>{{end}}
+      </li>
+    {{end}}
+  </ul>
+  {{end}}
+</div>
+{{end}}

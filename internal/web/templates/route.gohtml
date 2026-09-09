@@ -1,0 +1,76 @@
+{{define "content"}}
+<h1>Route</h1>
+<p class="muted">
+  Waypoints are listed in canonical order. A trip driven the other way is recognised
+  automatically and its stretches are numbered the same, so both directions pool together.
+  Editing any waypoint recomputes every stored trip.
+</p>
+
+<section class="card">
+  <div id="route-map"
+       data-waypoints="{{json .Route.Waypoints}}"
+       data-trips="{{json .Trips}}"></div>
+  <p class="muted small">
+    Click the map to fill in a new waypoint’s position. Pick a recent trip below to
+    draw it underneath: placing a waypoint on a road you actually drove is far more
+    reliable than judging it from the tiles.
+  </p>
+  <label class="inline">Backdrop
+    <select id="backdrop">
+      <option value="">None</option>
+      {{range .Trips}}<option value="{{.ID}}">{{.LocalDate}} {{hourLabel .LocalHour}} ({{.Direction}})</option>{{end}}
+    </select>
+  </label>
+</section>
+
+<section class="card">
+  <h2>Waypoints</h2>
+  {{if .Route.Waypoints}}
+  <table>
+    <thead><tr><th>#</th><th>Label</th><th>Latitude</th><th>Longitude</th><th>Radius</th><th>Optional</th><th></th></tr></thead>
+    <tbody>
+    {{range .Route.Waypoints}}
+      <tr>
+        <form method="post" action="/route/waypoints/{{.ID}}" id="wp-{{.ID}}"></form>
+        <td class="num">{{add .Seq 1}}</td>
+        <td><input form="wp-{{.ID}}" name="label" value="{{.Label}}" required></td>
+        <td><input form="wp-{{.ID}}" name="lat" value="{{.Lat}}" size="10" required></td>
+        <td><input form="wp-{{.ID}}" name="lon" value="{{.Lon}}" size="10" required></td>
+        <td><input form="wp-{{.ID}}" name="radius_m" value="{{.RadiusM}}" size="4" required> m</td>
+        <td><input form="wp-{{.ID}}" type="checkbox" name="optional" {{if .Optional}}checked{{end}}></td>
+        <td class="actions">
+          <button form="wp-{{.ID}}">Save</button>
+          <form method="post" action="/route/waypoints/{{.ID}}/move?dir=up"><button title="Move earlier">↑</button></form>
+          <form method="post" action="/route/waypoints/{{.ID}}/move?dir=down"><button title="Move later">↓</button></form>
+          <form method="post" action="/route/waypoints/{{.ID}}/delete"
+                onsubmit="return confirm('Delete this waypoint? Stored trips will be recomputed.')">
+            <button class="danger">×</button>
+          </form>
+        </td>
+      </tr>
+    {{end}}
+    </tbody>
+  </table>
+  {{else}}
+  <p class="muted">No waypoints yet.</p>
+  {{end}}
+</section>
+
+<section class="card">
+  <h2>Add a waypoint</h2>
+  <form method="post" action="/route/waypoints" class="inline-form">
+    <label>Label <input name="label" required placeholder="End of my street"></label>
+    <label>Latitude <input name="lat" id="new-lat" required></label>
+    <label>Longitude <input name="lon" id="new-lon" required></label>
+    <label>Radius <input name="radius_m" value="{{.DefaultRadius}}" size="4" required> m</label>
+    <label class="check"><input type="checkbox" name="optional"> Optional</label>
+    <button class="primary" type="submit">Add</button>
+  </form>
+  <p class="muted small">
+    An optional waypoint may be missed without marking the trip partial — useful where
+    two roads run close enough together that a crossing cannot be told apart reliably.
+  </p>
+</section>
+
+<script src="/static/route-map.js" defer></script>
+{{end}}

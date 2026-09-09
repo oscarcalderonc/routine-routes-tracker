@@ -1,0 +1,22 @@
+{{define "content"}}
+<h1>Trips</h1>
+
+<form class="filters" method="get" action="/trips">
+  <label>From <input type="date" name="from" value="{{.From}}"></label>
+  <label>To <input type="date" name="to" value="{{.To}}"></label>
+  <label>Direction
+    <select name="direction">
+      <option value="" {{if eq .Direction ""}}selected{{end}}>Both</option>
+      <option value="forward" {{if eq .Direction "forward"}}selected{{end}}>Forward</option>
+      <option value="reverse" {{if eq .Direction "reverse"}}selected{{end}}>Reverse</option>
+    </select>
+  </label>
+  <button type="submit">Apply</button>
+</form>
+
+{{if .Trips}}
+<section class="card">{{template "trip-table" .Trips}}</section>
+{{else}}
+<p class="muted">No trips in this range.</p>
+{{end}}
+{{end}}

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}} · Route Tracker</title>
+<link rel="stylesheet" href="/static/leaflet.css">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/htmx.min.js" defer></script>
+<script src="/static/leaflet.js" defer></script>
+<script src="/static/chart.umd.min.js" defer></script>
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="/">Route&nbsp;Tracker</a>
+  <nav>
+    <a href="/" class="{{if eq .Nav "dashboard"}}active{{end}}">Dashboard</a>
+    <a href="/stats" class="{{if eq .Nav "stats"}}active{{end}}">Statistics</a>
+    <a href="/trips" class="{{if eq .Nav "trips"}}active{{end}}">Trips</a>
+    <a href="/route" class="{{if eq .Nav "route"}}active{{end}}">Route</a>
+  </nav>
+</header>
+<main>
+{{template "content" .}}
+</main>
+</body>
+</html>

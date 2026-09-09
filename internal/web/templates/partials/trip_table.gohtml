@@ -1,0 +1,21 @@
+{{define "trip-table"}}
+<table>
+  <thead>
+    <tr><th>Date</th><th>Start</th><th>Direction</th><th>Status</th><th>Waypoints</th><th>Duration</th><th>Distance</th><th></th></tr>
+  </thead>
+  <tbody>
+  {{range .}}
+    <tr>
+      <td>{{.LocalDate}}</td>
+      <td class="num">{{hourLabel .LocalHour}}</td>
+      <td>{{if .Direction}}{{.Direction}}{{else}}—{{end}}</td>
+      <td><span class="badge {{.Status}}">{{.Status}}</span></td>
+      <td class="num">{{.MatchedWaypoints}}</td>
+      <td class="num">{{duration .DurationS}}</td>
+      <td class="num">{{km .DistanceM}} km</td>
+      <td><a href="/trips/{{.ID}}">open</a></td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+{{end}}

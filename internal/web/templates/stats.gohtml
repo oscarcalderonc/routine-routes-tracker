@@ -1,0 +1,110 @@
+{{define "content"}}
+<h1>Statistics</h1>
+
+<form class="filters" method="get" action="/stats">
+  <label>From <input type="date" name="from" value="{{.From}}"></label>
+  <label>To <input type="date" name="to" value="{{.To}}"></label>
+  <label>Direction
+    <select name="direction">
+      <option value="" {{if eq .Direction ""}}selected{{end}}>Both pooled</option>
+      <option value="forward" {{if eq .Direction "forward"}}selected{{end}}>Forward only</option>
+      <option value="reverse" {{if eq .Direction "reverse"}}selected{{end}}>Reverse only</option>
+    </select>
+  </label>
+  <button type="submit">Apply</button>
+</form>
+
+{{if not .Report.Segments}}
+<p class="muted">No measurements in this range.</p>
+{{else}}
+
+<section class="card">
+  <h2>Is a stretch busy at this hour?</h2>
+  <p class="muted">
+    Median time for each stretch at each hour of the day. Colour compares the hour with
+    the fastest that stretch is ever driven, so green means it runs freely and red means
+    it is reliably slower. Hatched cells have fewer than three measurements and should
+    not be read as a pattern.
+  </p>
+  <div class="scroll-x">
+  <table class="matrix">
+    <thead>
+      <tr><th>Stretch</th>{{range .Report.HoursPresent}}<th>{{hourLabel .}}</th>{{end}}</tr>
+    </thead>
+    <tbody>
+    {{$hours := .Report.HoursPresent}}
+    {{$cells := .Report.Hours}}
+    {{range .Report.Segments}}
+      {{$seq := .Seq}}
+      <tr>
+        <th class="rowhead">{{.Label}}</th>
+        {{range $h := $hours}}
+          {{$cell := false}}
+          {{range $cells}}{{if and (eq .Seq $seq) (eq .Hour $h)}}{{$cell = .}}{{end}}{{end}}
+          {{if $cell}}
+            <td class="cell {{if $cell.Sparse}}sparse{{end}}"
+                style="background: {{heatColour $cell.RelativeToBest}}"
+                title="{{$cell.Count}} trip(s), {{round2 $cell.RelativeToBest}}× the fastest">
+              <span class="cell-value">{{duration $cell.MedianS}}</span>
+              <span class="cell-count">n={{$cell.Count}}</span>
+            </td>
+          {{else}}
+            <td class="cell empty">—</td>
+          {{end}}
+        {{end}}
+      </tr>
+    {{end}}
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Per stretch</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Stretch</th><th>Trips</th><th>Median</th><th>Mean</th>
+        <th>P25</th><th>P75</th><th>P90</th><th>Fastest</th><th>Slowest</th>
+        <th>Length</th><th>Median speed</th>
+      </tr>
+    </thead>
+    <tbody>
+    {{range .Report.Segments}}
+      <tr>
+        <td>{{.Label}}</td>
+        <td class="num">{{.Duration.Count}}</td>
+        <td class="num strong">{{duration .Duration.Median}}</td>
+        <td class="num">{{duration .Duration.Mean}}</td>
+        <td class="num">{{duration .Duration.P25}}</td>
+        <td class="num">{{duration .Duration.P75}}</td>
+        <td class="num">{{duration .Duration.P90}}</td>
+        <td class="num">{{duration .Duration.Min}}</td>
+        <td class="num">{{duration .Duration.Max}}</td>
+        <td class="num">{{km .DistanceM}} km</td>
+        <td class="num">{{round1 .MedianSpeedKPH}} km/h</td>
+      </tr>
+    {{end}}
+    </tbody>
+  </table>
+</section>
+
+<section class="card">
+  <h2>Week by week</h2>
+  <p class="muted">Median time per stretch, by calendar week — this is where a road change or a new set of traffic lights shows up.</p>
+  <canvas id="weeks-chart" height="120"></canvas>
+</section>
+
+<section class="card">
+  <h2>Every trip</h2>
+  <p class="muted">
+    One point per measurement. Unusually slow journeys are highlighted rather than
+    removed: a drive that took twice as long really did take twice as long.
+  </p>
+  <canvas id="trips-chart" height="120"></canvas>
+</section>
+
+<script id="report-data" type="application/json">{{json .Report}}</script>
+<script src="/static/stats-charts.js" defer></script>
+{{end}}
+{{end}}

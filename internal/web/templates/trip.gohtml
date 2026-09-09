@@ -1,0 +1,79 @@
+{{define "content"}}
+{{$trip := .Trip}}
+<div class="row between">
+  <h1>{{$trip.LocalDate}} · {{hourLabel $trip.LocalHour}}</h1>
+  <div class="actions">
+    <form method="post" action="/trips/{{$trip.ID}}/reprocess"><button>Recompute</button></form>
+    <form method="post" action="/trips/{{$trip.ID}}/delete"
+          onsubmit="return confirm('Delete this trip? The source file is kept and will not be re-imported.')">
+      <button class="danger">Delete</button>
+    </form>
+  </div>
+</div>
+
+<section class="stat-row">
+  <div class="stat"><span class="value">{{duration $trip.DurationS}}</span><span class="label">recorded</span></div>
+  <div class="stat"><span class="value">{{km $trip.DistanceM}}</span><span class="label">km</span></div>
+  <div class="stat"><span class="value">{{$trip.Direction}}</span><span class="label">direction</span></div>
+  <div class="stat"><span class="value">{{$trip.MatchedWaypoints}}</span><span class="label">waypoints reached</span></div>
+  <div class="stat"><span class="value">{{$trip.KeptPointCount}}/{{$trip.PointCount}}</span><span class="label">fixes kept</span></div>
+</section>
+
+{{if eq (printf "%s" $trip.Status) "partial"}}
+<p class="status warn">
+  Some waypoints were not reached, so the stretches touching them have no time.
+  Widening those waypoints’ radius on the <a href="/route">route page</a> and letting
+  the trip recompute will often recover them.
+</p>
+{{end}}
+
+<section class="card">
+  <div id="map" data-track="/api/trips/{{$trip.ID}}/track.json"
+       data-waypoints="{{json .Route.Waypoints}}"></div>
+</section>
+
+<section class="card">
+  <h2>Stretches</h2>
+  <table>
+    <thead><tr><th>#</th><th>Stretch</th><th>From</th><th>To</th><th>Duration</th><th>Distance</th><th>Avg speed</th></tr></thead>
+    <tbody>
+    {{range $trip.Segments}}
+      <tr class="{{if not .IsComplete}}muted-row{{end}}">
+        <td class="num">{{add .Seq 1}}</td>
+        <td>{{.Label}}</td>
+        <td class="num">{{clock .StartedAt}}</td>
+        <td class="num">{{clock .EndedAt}}</td>
+        <td class="num strong">{{if .DurationS}}{{duration .DurationS}}{{else}}not measured{{end}}</td>
+        <td class="num">{{if .DistanceM}}{{km .DistanceM}} km{{else}}—{{end}}</td>
+        <td class="num">{{if .AvgSpeedKPH}}{{round1 .AvgSpeedKPH}} km/h{{else}}—{{end}}</td>
+      </tr>
+    {{end}}
+    </tbody>
+  </table>
+</section>
+
+<section class="card">
+  <h2>Waypoint crossings</h2>
+  <table>
+    <thead><tr><th>Seq</th><th>Crossed</th><th>Closest approach</th><th>Distance</th><th>How</th></tr></thead>
+    <tbody>
+    {{range $trip.Crossings}}
+      <tr>
+        <td class="num">{{add .WaypointSeq 1}}</td>
+        <td class="num">{{clock .CrossedAt}}</td>
+        <td class="num">{{clock .ClosestAt}}</td>
+        <td class="num">{{round1 .ClosestDistanceM}} m</td>
+        <td><span class="badge subtle">{{.Method}}</span></td>
+      </tr>
+    {{end}}
+    </tbody>
+  </table>
+  <p class="muted small">
+    “Interpolated” means no recorded fix landed inside the waypoint’s radius and the
+    crossing time was derived from the line between the two fixes either side — the
+    normal case at driving speed.
+  </p>
+</section>
+
+<script src="/static/trip-map.js" defer></script>
+{{end}}
