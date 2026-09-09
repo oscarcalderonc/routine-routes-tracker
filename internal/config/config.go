@@ -14,7 +14,7 @@ import (
 // Config holds every setting the tracker needs. Values come from the
 // environment so that deployments can supply them without a config file.
 type Config struct {
-	// Addr is the listen address, for example ":8080".
+	// Addr is the listen address, for example ":8381".
 	Addr string
 	// DataDir holds the database, the retained source files and the sync inbox.
 	DataDir string
@@ -65,7 +65,7 @@ func Load() (Config, error) {
 	}
 
 	return Config{
-		Addr:            env("ADDR", ":"+env("PORT", "8080")),
+		Addr:            env("ADDR", ":"+env("PORT", "8381")),
 		DataDir:         dataDir,
 		DBPath:          env("DB_PATH", filepath.Join(dataDir, "tracker.db")),
 		Location:        loc,

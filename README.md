@@ -113,7 +113,7 @@ Everything is read from the environment.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `PORT` | `8080` | Listen port (`ADDR` overrides with a full address) |
+| `PORT` | `8381` | Listen port (`ADDR` overrides with a full address) |
 | `DATA_DIR` | `./data` | Database, retained recordings and the inbox |
 | `DB_PATH` | `$DATA_DIR/tracker.db` | SQLite file |
 | `APP_TZ` | `UTC` | IANA zone that dates and hours are reported in |
@@ -184,7 +184,7 @@ where "it's only my home lab" would bite.
 
 ```sh
 make test          # the matcher tests are the ones that matter
-make run           # serves on :8080 against ./data
+make run           # serves on :8381 against ./data
 ```
 
 Drop `.gpx` files into `./data/inbox` and press Refresh; no remote needed.

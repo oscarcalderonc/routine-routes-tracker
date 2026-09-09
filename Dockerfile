@@ -28,13 +28,13 @@ COPY --from=build /out/tracker /usr/local/bin/tracker
 # owned by this UID; see the deployment section of the README.
 USER tracker
 WORKDIR /data
-EXPOSE 8080
+EXPOSE 8381
 
 ENV DATA_DIR=/data \
-    PORT=8080 \
+    PORT=8381 \
     APP_TZ=UTC
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD wget -qO- http://127.0.0.1:8080/healthz || exit 1
+  CMD wget -qO- http://127.0.0.1:8381/healthz || exit 1
 
 ENTRYPOINT ["/usr/local/bin/tracker"]

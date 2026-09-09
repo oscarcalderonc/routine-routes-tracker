@@ -4,7 +4,7 @@ services:
   tracker:
     build: .
     ports:
-      - "8080:8080"
+      - "8381:8381"
     environment:
       APP_TZ: Europe/Warsaw
       # Leave the drive settings unset to work purely from the inbox directory.
