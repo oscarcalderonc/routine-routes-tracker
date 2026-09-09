@@ -5,10 +5,12 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -29,6 +31,28 @@ func main() {
 	}
 }
 
+// ensureDataDir checks that the data directory exists and can be written to,
+// before anything tries to use it.
+//
+// In deployment this directory is a bind mount from the host, and a bind mount
+// takes its ownership from the host rather than from the image. If it has not
+// been given to the user the container runs as, every later failure is a
+// confusing one from whichever component touches the filesystem first, so the
+// condition is reported here in terms of the fix.
+func ensureDataDir(dir string) error {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("data directory %s cannot be created (uid %d): %w", dir, os.Getuid(), err)
+	}
+
+	probe := filepath.Join(dir, ".write-test")
+	if err := os.WriteFile(probe, []byte("ok"), 0o644); err != nil {
+		return fmt.Errorf("data directory %s is not writable by uid %d; "+
+			"if it is a bind mount, run: chown -R %d:%d %s: %w",
+			dir, os.Getuid(), os.Getuid(), os.Getgid(), dir, err)
+	}
+	return os.Remove(probe)
+}
+
 func run(log *slog.Logger) error {
 	cfg, err := config.Load()
 	if err != nil {
@@ -41,7 +65,7 @@ func run(log *slog.Logger) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
+	if err := ensureDataDir(cfg.DataDir); err != nil {
 		return err
 	}
 	if err := drive.WriteConfig(cfg.RcloneConfig, cfg.RcloneConfigB64); err != nil {

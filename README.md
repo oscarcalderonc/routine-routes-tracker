@@ -139,18 +139,44 @@ instants are always stored, so switching is just a recompute.
 Point Coolify at this repository and let it build the Dockerfile — there is
 nothing else to build.
 
-1. Add a **persistent volume** mounted at `/data`. It holds the database, the
-   inbox and the retained recordings. Backing it up is copying it.
-2. Set `APP_TZ` to your zone.
-3. To pull from cloud storage, configure the remote once on any machine with
-   `rclone config`, then set `RCLONE_CONFIG_B64` to `base64 -w0 ~/.config/rclone/rclone.conf`,
-   along with `DRIVE_REMOTE` and `DRIVE_FOLDER`. The value is a credential, so
-   put it in Coolify's environment panel rather than in the repository.
-4. `/healthz` is the health endpoint.
+**Storage.** Create the directory on the server first and give it to the user the
+container runs as (UID 10001):
+
+```sh
+sudo mkdir -p /mnt/storage/apps/route-tracker
+sudo chown -R 10001:10001 /mnt/storage/apps/route-tracker
+```
+
+Then in Coolify add a **persistent storage** entry of type *bind mount*:
+
+| | |
+|---|---|
+| Host path | `/mnt/storage/apps/route-tracker` |
+| Container path | `/data` |
+
+That directory ends up holding `tracker.db`, `inbox/` (recordings pulled from
+the cloud folder) and `gpx/` (the retained originals). Backing it up is copying
+it; a SQLite database copied while the tracker is idle is a complete backup.
+
+The `chown` is not optional and is easy to miss. A bind mount keeps the *host's*
+ownership, so unlike a named volume it ignores the ownership set up inside the
+image — without it the container cannot write and refuses to start. The error
+message names the directory and the exact command to fix it, so if the container
+will not come up, read the first log line before anything else.
+
+**Environment.** Set these in Coolify's environment panel, not in the repository:
+
+- `APP_TZ` — your zone, e.g. `Europe/Warsaw`.
+- `DRIVE_REMOTE`, `DRIVE_FOLDER` and `RCLONE_CONFIG_B64` to pull from cloud
+  storage. Configure the remote once on any machine with `rclone config`, then
+  use `base64 -w0 ~/.config/rclone/rclone.conf` for the last value. It is a
+  credential, so it belongs in the environment panel.
+
+`/healthz` is the health endpoint.
 
 There is no authentication, on the assumption that the tracker is reachable only
 over a private network. Check that Coolify is not also publishing it on a public
-hostname. The upload path caps request size and refuses documents carrying a DTD
+hostname. The ingestion path caps file size and refuses documents carrying a DTD
 regardless, since parsing XML from an unauthenticated caller is the one place
 where "it's only my home lab" would bite.
 

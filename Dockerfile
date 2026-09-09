@@ -23,9 +23,11 @@ RUN apk add --no-cache ca-certificates tzdata rclone wget \
 
 COPY --from=build /out/tracker /usr/local/bin/tracker
 
+# Runs as UID 10001. Deployment uses a host bind mount, whose ownership comes
+# from the host rather than from this image, so the mounted directory must be
+# owned by this UID; see the deployment section of the README.
 USER tracker
 WORKDIR /data
-VOLUME ["/data"]
 EXPOSE 8080
 
 ENV DATA_DIR=/data \

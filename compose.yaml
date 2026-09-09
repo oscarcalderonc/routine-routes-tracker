@@ -7,12 +7,14 @@ services:
       - "8080:8080"
     environment:
       APP_TZ: Europe/Warsaw
-      # Leave the drive settings unset to work purely from ./data/inbox.
+      # Leave the drive settings unset to work purely from the inbox directory.
       # DRIVE_REMOTE: gdrive
       # DRIVE_FOLDER: gpx
       # RCLONE_CONFIG_B64: ...
     volumes:
-      - tracker-data:/data
-
-volumes:
-  tracker-data:
+      # A host path rather than a named volume, so the database and the retained
+      # recordings are visible and backup-able directly on the host. The
+      # container runs as UID 10001 and a bind mount keeps the host's ownership,
+      # so the directory must be given to that user once:
+      #   sudo mkdir -p ./data && sudo chown -R 10001:10001 ./data
+      - ./data:/data
