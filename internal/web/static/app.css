@@ -61,6 +61,8 @@ a:hover { text-decoration: underline; }
   margin-bottom: 18px;
 }
 .card.notice { border-color: var(--warn); }
+.card.danger-notice { border-color: var(--danger); border-width: 2px; }
+.card.danger-notice h2 { color: var(--danger); }
 
 .row { display: flex; gap: 16px; align-items: center; }
 .row.between { justify-content: space-between; flex-wrap: wrap; }

@@ -1,6 +1,18 @@
 {{define "content"}}
 <h1>Dashboard</h1>
 
+{{if .Ephemeral}}
+<section class="card danger-notice">
+  <h2>Nothing here will survive the next deployment</h2>
+  <p>
+    The data directory is part of the container rather than a mounted volume, so the
+    route, the imported trips and the record of which files have been read are all
+    discarded whenever the container is replaced — which every redeployment does.
+    Attach persistent storage to this path and redeploy before putting real work in.
+  </p>
+</section>
+{{end}}
+
 {{if not .RouteDefined}}
 <section class="card notice">
   <h2>Define the route first</h2>
@@ -24,6 +36,10 @@
           No cloud folder configured; files placed in the inbox directory are picked up.
         {{end}}
         {{if not .LastRefresh.IsZero}}Last import {{datetime .LastRefresh}}.{{end}}
+        {{if not .Initialised.IsZero}}
+          <br><span class="small">Database created {{datetime .Initialised}}. If that moves
+          with every deployment, the data directory is not being persisted.</span>
+        {{end}}
       </p>
     </div>
     <button hx-post="/refresh" hx-target="#refresh-status" hx-swap="outerHTML" class="primary">

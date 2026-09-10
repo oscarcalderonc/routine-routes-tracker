@@ -172,3 +172,22 @@ func nullFloat(v *float64) any {
 	}
 	return *v
 }
+
+// InitialisedAt reports when this database was first created, taken from when
+// the earliest migration was applied.
+//
+// It is the plainest available answer to "is my data surviving a deployment?":
+// if this keeps moving forward, the database is being recreated each time rather
+// than persisted.
+func (s *Store) InitialisedAt(ctx context.Context) (time.Time, error) {
+	var at sql.NullString
+	err := s.db.QueryRowContext(ctx,
+		`SELECT MIN(applied_at) FROM schema_migrations`).Scan(&at)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("query schema age: %w", err)
+	}
+	if !at.Valid {
+		return time.Time{}, nil
+	}
+	return parseTime(at.String), nil
+}

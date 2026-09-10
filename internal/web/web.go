@@ -20,11 +20,21 @@ import (
 	"github.com/oscarcalderonc/routine-routes-tracker/internal/storage"
 )
 
+// Options configures the interface.
+type Options struct {
+	// StorageEphemeral reports that the data directory will not survive the
+	// container being replaced. It is surfaced on the dashboard because the
+	// symptom — an empty tracker after a deployment — otherwise looks like a
+	// tracker that was never used.
+	StorageEphemeral bool
+}
+
 // Server holds the dependencies the handlers need.
 type Server struct {
 	svc    *service.Service
 	render *renderer
 	log    *slog.Logger
+	opts   Options
 	// background runs work started by a request but outliving it, such as a
 	// refresh, with a context that is not cancelled when the client
 	// disconnects.
@@ -32,12 +42,12 @@ type Server struct {
 }
 
 // NewServer builds the HTTP interface.
-func NewServer(ctx context.Context, svc *service.Service, log *slog.Logger) (*Server, error) {
+func NewServer(ctx context.Context, svc *service.Service, log *slog.Logger, opts Options) (*Server, error) {
 	r, err := newRenderer(svc.Location())
 	if err != nil {
 		return nil, err
 	}
-	return &Server{svc: svc, render: r, log: log, background: ctx}, nil
+	return &Server{svc: svc, render: r, log: log, opts: opts, background: ctx}, nil
 }
 
 // Handler returns the routes the server exposes.
@@ -109,6 +119,11 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
+	initialised, err := s.svc.Store().InitialisedAt(ctx)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
 	route, routeErr := s.svc.Store().ActiveTemplate(ctx)
 
 	s.render.page(w, r, "dashboard.gohtml", map[string]any{
@@ -127,6 +142,8 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 		"To":              to,
 		"Progress":        s.svc.Progress(),
 		"Location":        s.svc.Location().String(),
+		"Initialised":     initialised,
+		"Ephemeral":       s.opts.StorageEphemeral,
 	})
 }
 

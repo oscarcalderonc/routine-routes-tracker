@@ -83,6 +83,7 @@ func TestRenderPages(t *testing.T) {
 			}},
 			"DriveConfigured": true, "From": "2026-06-01", "To": "2026-09-09",
 			"Progress": service.Progress{}, "Location": "America/El_Salvador",
+			"Initialised": time.Now(), "Ephemeral": true,
 		},
 		"trips.gohtml": {
 			"Title": "Trips", "Nav": "trips", "Trips": []domain.Trip{trip},

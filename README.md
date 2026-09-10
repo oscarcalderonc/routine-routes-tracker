@@ -208,6 +208,26 @@ belongs to root and the tracker's unprivileged user could not write to it; the
 container therefore starts as root only long enough to hand the directory over,
 then drops to that user. The tracker process itself never runs as root.
 
+**Check the storage really is attached.** Without it the tracker works perfectly
+and silently loses everything on each deployment, which looks indistinguishable
+from a tracker nobody has used yet. It therefore says so itself, in the startup
+log and across the top of the dashboard:
+
+```
+THE DATA DIRECTORY IS NOT A MOUNTED VOLUME: everything stored will be lost
+when this container is replaced, which a redeployment does
+```
+
+The dashboard also shows when the database was created. If that timestamp moves
+with every deployment, the data directory is not being persisted, whatever the
+storage settings claim. The quickest confirmation from the server is that the
+host path is not empty:
+
+```sh
+ls -la /mnt/storage/apps/route-tracker     # expect tracker.db, gpx/, inbox/
+docker inspect --format '{{json .Mounts}}' <container> | python3 -m json.tool
+```
+
 If the directory somehow cannot be handed over, the container says so and stops
 rather than starting in a broken state, naming the directory and the command
 that fixes it:

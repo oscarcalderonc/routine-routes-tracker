@@ -91,11 +91,18 @@ func run(log *slog.Logger) error {
 	if err := ensureDataDir(cfg.DataDir); err != nil {
 		return err
 	}
+	// Before opening, since opening creates the file.
+	ephemeral := checkStorage(log, cfg.DataDir, cfg.DBPath)
+
 	store, err := storage.Open(ctx, cfg.DBPath)
 	if err != nil {
 		return err
 	}
 	defer store.Close()
+
+	if at, err := store.InitialisedAt(ctx); err == nil && !at.IsZero() {
+		log.Info("database initialised", "at", at.Format(time.RFC3339))
+	}
 
 	source, err := driveSource(ctx, cfg, log)
 	if err != nil {
@@ -125,7 +132,7 @@ func run(log *slog.Logger) error {
 		}
 	}()
 
-	srv, err := web.NewServer(ctx, svc, log)
+	srv, err := web.NewServer(ctx, svc, log, web.Options{StorageEphemeral: ephemeral})
 	if err != nil {
 		return err
 	}
