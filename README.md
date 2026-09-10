@@ -167,7 +167,7 @@ if it is a bind mount, run: chown -R 10001:10001 /data
 
 **Environment.** Set these in Coolify's environment panel, not in the repository:
 
-- `APP_TZ` — your zone, e.g. `Europe/Warsaw`.
+- `APP_TZ` — your zone: `America/El_Salvador`.
 - `DRIVE_REMOTE`, `DRIVE_FOLDER` and `RCLONE_CONFIG_B64` to pull from cloud
   storage. Configure the remote once on any machine with `rclone config`, then
   use `base64 -w0 ~/.config/rclone/rclone.conf` for the last value. It is a

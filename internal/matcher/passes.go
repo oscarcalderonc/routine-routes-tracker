@@ -174,7 +174,7 @@ func usableChord(a, b domain.Point) bool {
 	if dt <= 0 || dt > maxGapS {
 		return false
 	}
-	dist := geo.Haversine(a.Lat, a.Lon, b.Lat, b.Lon)
+	dist := geo.Distance(a.Lat, a.Lon, b.Lat, b.Lon)
 	return (dist/dt)*3.6 <= maxSpeedKPH
 }
 

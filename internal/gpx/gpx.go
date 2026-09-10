@@ -145,7 +145,7 @@ func filter(pts []domain.Point) []domain.Point {
 			// opening a new segment is exempt, because the apparent speed
 			// across a recording pause is meaningless.
 			dt := p.Time.Sub(prev.Time).Seconds()
-			dist := geo.Haversine(prev.Lat, prev.Lon, p.Lat, p.Lon)
+			dist := geo.Distance(prev.Lat, prev.Lon, p.Lat, p.Lon)
 			if !pendingBoundary && dt > 0 && (dist/dt)*3.6 > MaxSpeedKPH {
 				continue
 			}

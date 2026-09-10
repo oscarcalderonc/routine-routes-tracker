@@ -298,7 +298,7 @@ func trackDistance(track domain.Track, from, to int) float64 {
 	var total float64
 	for i := from; i < to; i++ {
 		a, b := track.Points[i], track.Points[i+1]
-		total += geo.Haversine(a.Lat, a.Lon, b.Lat, b.Lon)
+		total += geo.Distance(a.Lat, a.Lon, b.Lat, b.Lon)
 	}
 	return total
 }

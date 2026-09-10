@@ -18,8 +18,8 @@ import (
 )
 
 const (
-	testLat = 52.0
-	testLon = 21.0
+	testLat = 13.6929
+	testLon = -89.2182
 )
 
 func degLon(m float64) float64 {

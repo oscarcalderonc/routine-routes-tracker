@@ -25,7 +25,7 @@
   });
 
   if (bounds.length) map.fitBounds(bounds, { padding: [40, 40] });
-  else map.setView([52.2297, 21.0122], 13);
+  else map.setView([13.6929, -89.2182], 13);
 
   // A provisional marker showing where the next waypoint would go.
   let pending = null;

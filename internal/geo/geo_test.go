@@ -5,30 +5,46 @@ import (
 	"testing"
 )
 
-func TestHaversine_KnownDistance(t *testing.T) {
-	// One degree of latitude is close to 111 km anywhere on the globe.
-	got := Haversine(52.0, 21.0, 53.0, 21.0)
-	if math.Abs(got-111195) > 500 {
-		t.Errorf("Haversine over one degree of latitude = %.0f m, want ~111195 m", got)
+// The tracker runs in El Salvador; the projection is latitude-dependent, so the
+// tests exercise it there rather than at some arbitrary latitude.
+const (
+	testLat = 13.6929
+	testLon = -89.2182
+)
+
+// TestDistance_ShortHop checks a separation of the size the tracker actually
+// measures: consecutive fixes from a phone logger at driving speed.
+func TestDistance_ShortHop(t *testing.T) {
+	// 70 m east of the origin, the spacing of fixes at around 50 km/h.
+	const eastM = 70.0
+	f := NewFrame(testLat, testLon)
+	perDegLon, _ := f.Project(testLat, testLon+1)
+
+	got := Distance(testLat, testLon, testLat, testLon+eastM/perDegLon)
+	if math.Abs(got-eastM) > 0.01 {
+		t.Errorf("Distance over %v m east = %.3f m", eastM, got)
+	}
+
+	if got := Distance(testLat, testLon, testLat, testLon); got != 0 {
+		t.Errorf("Distance between identical coordinates = %v, want 0", got)
 	}
 }
 
-func TestFrame_ProjectRoundTrip(t *testing.T) {
-	f := NewFrame(52.2297, 21.0122)
-	x, y := f.Project(52.2297, 21.0122)
-	if x != 0 || y != 0 {
-		t.Errorf("Project at origin = (%v, %v), want (0, 0)", x, y)
+// TestFrame_DegreeLengths pins the projection against the ellipsoidal lengths
+// of a degree at the latitude this tracker runs at. A spherical model would put
+// the meridional figure near 111195 m, about half a percent adrift, which is
+// exactly the discrepancy this package exists to avoid.
+func TestFrame_DegreeLengths(t *testing.T) {
+	f := NewFrame(testLat, testLon)
+
+	_, perDegLat := f.Project(testLat+1, testLon)
+	if math.Abs(perDegLat-110636) > 20 {
+		t.Errorf("one degree of latitude = %.0f m, want about 110636 m", perDegLat)
 	}
 
-	// A point due north should project to a positive y and a negligible x, and
-	// its magnitude should agree with the spherical distance.
-	x, y = f.Project(52.2397, 21.0122)
-	if math.Abs(x) > 0.001 {
-		t.Errorf("Project due north gave x = %v, want ~0", x)
-	}
-	want := Haversine(52.2297, 21.0122, 52.2397, 21.0122)
-	if math.Abs(y-want) > 1 {
-		t.Errorf("Project due north gave y = %.2f m, want %.2f m", y, want)
+	perDegLon, _ := f.Project(testLat, testLon+1)
+	if math.Abs(perDegLon-108175) > 20 {
+		t.Errorf("one degree of longitude = %.0f m, want about 108175 m", perDegLon)
 	}
 }
 

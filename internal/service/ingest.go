@@ -119,7 +119,7 @@ func extent(track domain.Track) (distanceM, minLat, minLon, maxLat, maxLon float
 		minLat, maxLat = math.Min(minLat, p.Lat), math.Max(maxLat, p.Lat)
 		minLon, maxLon = math.Min(minLon, p.Lon), math.Max(maxLon, p.Lon)
 		if i > 0 {
-			distanceM += geo.Haversine(pts[i-1].Lat, pts[i-1].Lon, p.Lat, p.Lon)
+			distanceM += geo.Distance(pts[i-1].Lat, pts[i-1].Lon, p.Lat, p.Lon)
 		}
 	}
 	return distanceM, minLat, minLon, maxLat, maxLon

@@ -10,8 +10,6 @@ package geo
 
 import "math"
 
-const earthRadiusM = 6371008.8
-
 // Frame converts geographic coordinates to metres east and north of a fixed
 // origin. It is valid for offsets of a few kilometres, which comfortably covers
 // any waypoint radius.
@@ -39,16 +37,22 @@ func (f Frame) Project(lat, lon float64) (x, y float64) {
 	return (lon - f.lon0) * f.mPerDegLon, (lat - f.lat0) * f.mPerDegLat
 }
 
-// Haversine returns the great-circle distance in metres between two
-// coordinates. It is used for summing track length, where the flat
-// approximation's assumption of a small offset does not hold.
-func Haversine(lat1, lon1, lat2, lon2 float64) float64 {
-	const toRad = math.Pi / 180
-	dLat := (lat2 - lat1) * toRad
-	dLon := (lon2 - lon1) * toRad
-	a := math.Sin(dLat/2)*math.Sin(dLat/2) +
-		math.Cos(lat1*toRad)*math.Cos(lat2*toRad)*math.Sin(dLon/2)*math.Sin(dLon/2)
-	return 2 * earthRadiusM * math.Asin(math.Min(1, math.Sqrt(a)))
+// Distance returns the distance in metres between two nearby coordinates.
+//
+// It uses the same local frame as the rest of this package, so distances and
+// the crossing geometry agree. That consistency is the point: a spherical
+// formula such as haversine differs from the ellipsoidal frame by around half a
+// percent at tropical latitudes, and having two models of the Earth in one
+// program means a stretch's reported length disagrees slightly with the
+// geometry used to find its endpoints.
+//
+// The flat approximation costs nothing here because every distance the tracker
+// measures is a hop between consecutive fixes, tens of metres apart. Error
+// grows with the square of the separation and only becomes noticeable over
+// hundreds of kilometres.
+func Distance(lat1, lon1, lat2, lon2 float64) float64 {
+	x, y := NewFrame(lat1, lon1).Project(lat2, lon2)
+	return math.Hypot(x, y)
 }
 
 // Chord describes how the straight line between two consecutive fixes relates

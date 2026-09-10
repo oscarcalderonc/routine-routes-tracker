@@ -6,7 +6,7 @@ services:
     ports:
       - "8381:8381"
     environment:
-      APP_TZ: Europe/Warsaw
+      APP_TZ: America/El_Salvador
       # Leave the drive settings unset to work purely from the inbox directory.
       # DRIVE_REMOTE: gdrive
       # DRIVE_FOLDER: gpx

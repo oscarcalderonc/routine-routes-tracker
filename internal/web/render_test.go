@@ -39,7 +39,7 @@ func TestRenderPages(t *testing.T) {
 	route := domain.Template{
 		ID: "t1", Name: "Daily route", Version: 3,
 		Waypoints: []domain.Waypoint{
-			{ID: "w0", Seq: 0, Label: "Street end", Lat: 52.2297, Lon: 21.0122, RadiusM: 25},
+			{ID: "w0", Seq: 0, Label: "Street end", Lat: 13.6929, Lon: -89.2182, RadiusM: 25},
 			{ID: "w1", Seq: 1, Label: "Bridge", Lat: 52.2317, Lon: 21.0222, RadiusM: 25},
 		},
 	}
@@ -78,7 +78,7 @@ func TestRenderPages(t *testing.T) {
 			"Trips": []domain.Trip{trip}, "Counts": map[string]int{string(domain.StatusMatched): 8},
 			"Stale": 2, "LastRefresh": time.Now(), "Route": route, "RouteDefined": true,
 			"DriveConfigured": true, "From": "2026-06-01", "To": "2026-09-09",
-			"Progress": service.Progress{}, "Location": "Europe/Warsaw",
+			"Progress": service.Progress{}, "Location": "America/El_Salvador",
 		},
 		"trips.gohtml": {
 			"Title": "Trips", "Nav": "trips", "Trips": []domain.Trip{trip},
