@@ -47,12 +47,9 @@ func (s *Server) addWaypoint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	route, err := s.svc.Store().ActiveTemplate(ctx)
-	if errors.Is(err, storage.ErrNotFound) {
-		// The first waypoint implies the route, so create it on demand rather
-		// than asking for a separate setup step.
-		route, err = s.svc.Store().CreateTemplate(ctx, "Daily route")
-	}
+	// The first waypoint implies the route, so it is created on demand rather
+	// than asking for a separate setup step.
+	route, err := s.svc.Store().EnsureActiveTemplate(ctx, "Daily route")
 	if err != nil {
 		s.fail(w, r, err)
 		return

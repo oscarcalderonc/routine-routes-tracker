@@ -61,6 +61,28 @@ func (s *Store) waypoints(ctx context.Context, templateID string) ([]domain.Wayp
 	return out, rows.Err()
 }
 
+// EnsureActiveTemplate returns the active route, creating it if there is none.
+//
+// Only one route may be active, which the database enforces. Two callers can
+// therefore reach the creation step together and one will lose; losing means the
+// other has already created the route, so the answer is simply to read it back.
+func (s *Store) EnsureActiveTemplate(ctx context.Context, name string) (domain.Template, error) {
+	t, err := s.ActiveTemplate(ctx)
+	if err == nil || !errors.Is(err, ErrNotFound) {
+		return t, err
+	}
+
+	t, err = s.CreateTemplate(ctx, name)
+	if err == nil {
+		return t, nil
+	}
+	// Another request created the route first. Its version is the one to use.
+	if created, readErr := s.ActiveTemplate(ctx); readErr == nil {
+		return created, nil
+	}
+	return domain.Template{}, err
+}
+
 // CreateTemplate stores a new route template. It is used to seed the single
 // route on first run.
 func (s *Store) CreateTemplate(ctx context.Context, name string) (domain.Template, error) {

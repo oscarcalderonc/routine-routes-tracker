@@ -3,6 +3,7 @@ package storage
 import (
 	"errors"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -332,5 +333,108 @@ func TestProcessedFiles(t *testing.T) {
 	}
 	if ok, _ := s.IsProcessed(ctx, "broken.gpx"); ok {
 		t.Error("a forgotten file should be eligible for import again")
+	}
+}
+
+// TestEnsureActiveTemplate_OnlyEverOneRoute covers the first waypoint creating
+// the route on demand. Concurrent callers must converge on one route: a second
+// one would be invisible, since only the oldest is ever shown, and waypoints
+// added to it would appear to vanish.
+func TestEnsureActiveTemplate_OnlyEverOneRoute(t *testing.T) {
+	s := newTestStore(t)
+	ctx := t.Context()
+
+	const callers = 8
+	ids := make(chan string, callers)
+	errs := make(chan error, callers)
+
+	var wg sync.WaitGroup
+	for range callers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			tmpl, err := s.EnsureActiveTemplate(ctx, "Daily route")
+			if err != nil {
+				errs <- err
+				return
+			}
+			ids <- tmpl.ID
+		}()
+	}
+	wg.Wait()
+	close(ids)
+	close(errs)
+
+	for err := range errs {
+		t.Errorf("EnsureActiveTemplate returned %v", err)
+	}
+
+	seen := map[string]int{}
+	for id := range ids {
+		seen[id]++
+	}
+	if len(seen) != 1 {
+		t.Errorf("callers saw %d different routes, want 1: %v", len(seen), seen)
+	}
+
+	var active int
+	if err := s.DB().QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM route_templates WHERE active = 1`).Scan(&active); err != nil {
+		t.Fatal(err)
+	}
+	if active != 1 {
+		t.Errorf("%d active routes in the database, want 1", active)
+	}
+}
+
+// TestMigrations_DeactivateExistingDuplicates covers upgrading a database that
+// already holds more than one active route, which the constraint would otherwise
+// refuse to be created over.
+func TestMigrations_DeactivateExistingDuplicates(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "legacy.db")
+
+	// Build the schema as it was before the constraint existed, then plant two
+	// active routes in it.
+	s, err := Open(t.Context(), path)
+	if err != nil {
+		t.Fatalf("Open returned %v", err)
+	}
+	if _, err := s.DB().ExecContext(t.Context(),
+		`DROP INDEX route_templates_single_active`); err != nil {
+		t.Fatalf("dropping the index: %v", err)
+	}
+	for _, name := range []string{"first", "second"} {
+		if _, err := s.CreateTemplate(t.Context(), name); err != nil {
+			t.Fatalf("CreateTemplate(%q): %v", name, err)
+		}
+	}
+	if _, err := s.DB().ExecContext(t.Context(),
+		`DELETE FROM schema_migrations WHERE name LIKE '%0002%'`); err != nil {
+		t.Fatalf("rewinding the migration: %v", err)
+	}
+	s.Close()
+
+	// Reopening must apply the migration over the duplicates rather than fail.
+	s, err = Open(t.Context(), path)
+	if err != nil {
+		t.Fatalf("reopening a database with duplicate routes: %v", err)
+	}
+	defer s.Close()
+
+	var active int
+	if err := s.DB().QueryRowContext(t.Context(),
+		`SELECT COUNT(*) FROM route_templates WHERE active = 1`).Scan(&active); err != nil {
+		t.Fatal(err)
+	}
+	if active != 1 {
+		t.Errorf("%d active routes after migrating, want 1", active)
+	}
+
+	tmpl, err := s.ActiveTemplate(t.Context())
+	if err != nil {
+		t.Fatalf("ActiveTemplate returned %v", err)
+	}
+	if tmpl.Name != "first" {
+		t.Errorf("kept %q active, want the oldest route %q", tmpl.Name, "first")
 	}
 }
