@@ -244,6 +244,20 @@ if it is a bind mount, run: chown -R 10001:10001 /data
   below. The key is a credential, so it belongs in the environment panel rather
   than in the repository.
 
+**Never mark the credential as a build variable.** A build variable is passed to
+the image build as an `ARG`, which records it in the image's build history, where
+anyone who can read the image can recover it — and prints it in the deployment
+log. Docker warns about this itself:
+
+```
+SecretsUsedInArgOrEnv: Do not use ARG or ENV instructions for sensitive data
+```
+
+Nothing in the build needs any of these values; they are read at startup. Keep
+them as runtime variables only. `GOOGLE_CREDENTIALS_FILE` avoids the question
+altogether by pointing at a key file placed in the mounted data directory, which
+never passes through the environment.
+
 `/healthz` is the health endpoint.
 
 There is no authentication, on the assumption that the tracker is reachable only
