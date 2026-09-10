@@ -27,8 +27,14 @@ type renderer struct {
 	partials *template.Template
 }
 
-func newRenderer() (*renderer, error) {
-	funcs := templateFuncs()
+// newRenderer parses the templates. The location is the timezone instants are
+// reported in: values are stored in UTC, so without converting here every time
+// on screen would be shown in UTC whatever APP_TZ says.
+func newRenderer(loc *time.Location) (*renderer, error) {
+	if loc == nil {
+		loc = time.UTC
+	}
+	funcs := templateFuncs(loc)
 
 	partials, err := template.New("partials").Funcs(funcs).
 		ParseFS(templateFS, "templates/partials/*.gohtml")
@@ -94,11 +100,11 @@ func staticHandler() http.Handler {
 	})
 }
 
-func templateFuncs() template.FuncMap {
+func templateFuncs(loc *time.Location) template.FuncMap {
 	return template.FuncMap{
 		"duration":   formatDuration,
-		"clock":      formatClock,
-		"datetime":   formatDateTime,
+		"clock":      func(t time.Time) string { return formatClock(t, loc) },
+		"datetime":   func(t time.Time) string { return formatDateTime(t, loc) },
 		"round1":     func(v float64) string { return fmt.Sprintf("%.1f", v) },
 		"round2":     func(v float64) string { return fmt.Sprintf("%.2f", v) },
 		"km":         func(m float64) string { return fmt.Sprintf("%.2f", m/1000) },
@@ -127,18 +133,20 @@ func formatDuration(seconds float64) string {
 	return fmt.Sprintf("%dm %02ds", m, s)
 }
 
-func formatClock(t time.Time) string {
+// formatClock renders a time of day in the reporting timezone.
+func formatClock(t time.Time, loc *time.Location) string {
 	if t.IsZero() {
 		return "—"
 	}
-	return t.Format("15:04:05")
+	return t.In(loc).Format("15:04:05")
 }
 
-func formatDateTime(t time.Time) string {
+// formatDateTime renders an instant in the reporting timezone.
+func formatDateTime(t time.Time, loc *time.Location) string {
 	if t.IsZero() {
 		return "—"
 	}
-	return t.Format("2006-01-02 15:04")
+	return t.In(loc).Format("2006-01-02 15:04")
 }
 
 func weekdayName(d int) string {

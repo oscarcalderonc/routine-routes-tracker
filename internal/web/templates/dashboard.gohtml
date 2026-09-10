@@ -51,7 +51,7 @@
   </p>
   <table>
     <thead>
-      <tr><th>Stretch</th><th>Median</th><th>Fastest</th><th>Slowest</th><th>Congestion</th><th>Trips</th></tr>
+      <tr><th>Stretch</th><th class="num">Median</th><th class="num">Fastest</th><th class="num">Slowest</th><th class="num">Congestion</th><th class="num">Trips</th></tr>
     </thead>
     <tbody>
     {{range .Report.Segments}}
@@ -83,7 +83,7 @@
     right place, put them right and reconsider it here.
   </p>
   <table>
-    <thead><tr><th>File</th><th>Recorded</th><th>Why</th><th></th></tr></thead>
+    <thead><tr><th>File</th><th class="num">Recorded</th><th>Why</th><th></th></tr></thead>
     <tbody>
     {{range .Skipped}}
       <tr>

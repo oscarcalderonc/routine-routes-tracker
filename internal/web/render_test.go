@@ -15,7 +15,7 @@ import (
 // TestNewRenderer_ParsesEveryTemplate catches a malformed template at test time
 // rather than when a page is first opened.
 func TestNewRenderer_ParsesEveryTemplate(t *testing.T) {
-	r, err := newRenderer()
+	r, err := newRenderer(time.UTC)
 	if err != nil {
 		t.Fatalf("newRenderer returned %v", err)
 	}
@@ -29,7 +29,7 @@ func TestNewRenderer_ParsesEveryTemplate(t *testing.T) {
 // TestRenderPages exercises each page with data shaped like the real thing, so
 // that a field renamed in the domain shows up here instead of in the browser.
 func TestRenderPages(t *testing.T) {
-	r, err := newRenderer()
+	r, err := newRenderer(time.UTC)
 	if err != nil {
 		t.Fatalf("newRenderer returned %v", err)
 	}
@@ -119,7 +119,7 @@ func TestRenderPages(t *testing.T) {
 }
 
 func TestRenderPartial_RefreshStatus(t *testing.T) {
-	r, err := newRenderer()
+	r, err := newRenderer(time.UTC)
 	if err != nil {
 		t.Fatalf("newRenderer returned %v", err)
 	}
@@ -156,6 +156,88 @@ func TestRenderPartial_RefreshStatus(t *testing.T) {
 	})
 	if !strings.Contains(w.Body.String(), "hx-trigger") {
 		t.Error("a running refresh should poll for progress")
+	}
+}
+
+// TestFormatClock_UsesTheReportingTimezone guards the bug where every instant on
+// screen was shown in UTC regardless of APP_TZ, because the helpers formatted a
+// time in whatever location it happened to carry and storage returns UTC.
+func TestFormatClock_UsesTheReportingTimezone(t *testing.T) {
+	// El Salvador is six hours behind, with no daylight saving.
+	loc, err := time.LoadLocation("America/El_Salvador")
+	if err != nil {
+		t.Skipf("zone database unavailable: %v", err)
+	}
+	// A drive recorded at 13:00 UTC happened at 07:00 locally.
+	at := time.Date(2026, 9, 10, 13, 0, 0, 0, time.UTC)
+
+	if got := formatClock(at, loc); got != "07:00:00" {
+		t.Errorf("formatClock = %q, want 07:00:00", got)
+	}
+	if got := formatDateTime(at, loc); got != "2026-09-10 07:00" {
+		t.Errorf("formatDateTime = %q, want 2026-09-10 07:00", got)
+	}
+	if got := formatClock(at, time.UTC); got != "13:00:00" {
+		t.Errorf("formatClock in UTC = %q, want 13:00:00", got)
+	}
+	if got := formatClock(time.Time{}, loc); got != "—" {
+		t.Errorf("formatClock of no time = %q, want an em dash", got)
+	}
+}
+
+// TestRenderTrip_ShowsLocalTimes is the same guard at the page level.
+func TestRenderTrip_ShowsLocalTimes(t *testing.T) {
+	loc, err := time.LoadLocation("America/El_Salvador")
+	if err != nil {
+		t.Skipf("zone database unavailable: %v", err)
+	}
+	r, err := newRenderer(loc)
+	if err != nil {
+		t.Fatalf("newRenderer returned %v", err)
+	}
+
+	at := time.Date(2026, 9, 10, 13, 0, 0, 0, time.UTC)
+	trip := domain.Trip{
+		ID: "t1", LocalDate: "2026-09-10", Status: domain.StatusMatched,
+		StartedAt: at, EndedAt: at.Add(3 * time.Minute),
+		Crossings: []domain.Crossing{{CrossedAt: at, ClosestAt: at, Method: domain.MethodInterpolated}},
+		Segments:  []domain.Segment{{Seq: 0, Label: "a → b", StartedAt: at, EndedAt: at.Add(time.Minute), IsComplete: true}},
+	}
+
+	w := httptest.NewRecorder()
+	r.page(w, httptest.NewRequest(http.MethodGet, "/", nil), "trip.gohtml", map[string]any{
+		"Title": "Trip", "Nav": "trips", "Trip": trip, "Route": domain.Template{},
+	})
+
+	body := w.Body.String()
+	if strings.Contains(body, "13:00:00") {
+		t.Error("the page shows 13:00:00, so times are still rendered in UTC")
+	}
+	if !strings.Contains(body, "07:00:00") {
+		t.Error("the page does not show the local time 07:00:00")
+	}
+}
+
+// TestTableHeadersMatchTheirColumns checks that a heading above a right-aligned
+// column is right-aligned too. Without it the heading and its values sit at
+// opposite edges and the column reads as two.
+func TestTableHeadersMatchTheirColumns(t *testing.T) {
+	headings := map[string][]string{
+		"trip.gohtml":      {"From", "To", "Duration", "Distance", "Avg speed", "Crossed", "Closest approach"},
+		"stats.gohtml":     {"Median", "Mean", "Fastest", "Slowest", "Length", "Median speed"},
+		"dashboard.gohtml": {"Median", "Fastest", "Slowest", "Congestion", "Trips"},
+	}
+
+	for name, wanted := range headings {
+		body, err := templateFS.ReadFile("templates/" + name)
+		if err != nil {
+			t.Fatalf("reading %s: %v", name, err)
+		}
+		for _, h := range wanted {
+			if strings.Contains(string(body), "<th>"+h+"</th>") {
+				t.Errorf("%s: heading %q labels a right-aligned column but is not itself right-aligned", name, h)
+			}
+		}
 	}
 }
 

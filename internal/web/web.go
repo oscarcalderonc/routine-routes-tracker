@@ -33,7 +33,7 @@ type Server struct {
 
 // NewServer builds the HTTP interface.
 func NewServer(ctx context.Context, svc *service.Service, log *slog.Logger) (*Server, error) {
-	r, err := newRenderer()
+	r, err := newRenderer(svc.Location())
 	if err != nil {
 		return nil, err
 	}

@@ -155,5 +155,7 @@ table.matrix td.cell.sparse {
     rgba(255,255,255,.30) 0 5px, rgba(255,255,255,0) 5px 10px);
 }
 table.matrix th.rowhead { text-transform: none; font-size: 13px; color: var(--text); white-space: nowrap; }
+/* The hour headings label centred cells, so they are centred to match. */
+table.matrix thead th + th { text-align: center; }
 
 canvas { max-width: 100%; }
