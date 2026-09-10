@@ -91,7 +91,7 @@ func TestRenderPages(t *testing.T) {
 		"trip.gohtml": {"Title": "Trip", "Nav": "trips", "Trip": trip, "Route": route},
 		"route.gohtml": {
 			"Title": "Route", "Nav": "route", "Route": route,
-			"Trips": []domain.Trip{trip}, "DefaultRadius": 25,
+			"Trips": []domain.Trip{trip}, "DefaultRadius": 25, "Stale": true,
 		},
 		"stats.gohtml": {
 			"Title": "Statistics", "Nav": "stats", "Report": report,

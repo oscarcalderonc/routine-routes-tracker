@@ -13,6 +13,17 @@ import (
 // waypoints on the same street become ambiguous.
 const defaultRadiusM = 25
 
+// staleRoute sends the browser back to a freshly loaded route page.
+//
+// It answers an action naming a waypoint that no longer exists, which is what a
+// page left open in a tab produces after the waypoint has been removed
+// elsewhere. Reporting the missing row as a server error told the reader nothing
+// and left the out-of-date page on screen; reloading it both explains the
+// situation and fixes it.
+func (s *Server) staleRoute(w http.ResponseWriter, r *http.Request) {
+	redirect(w, r, "/route?stale=1")
+}
+
 func (s *Server) showRoute(w http.ResponseWriter, r *http.Request) {
 	route, err := s.svc.Store().ActiveTemplate(r.Context())
 	if errors.Is(err, storage.ErrNotFound) {
@@ -32,6 +43,9 @@ func (s *Server) showRoute(w http.ResponseWriter, r *http.Request) {
 		"Title": "Route",
 		"Nav":   "route",
 		"Route": route,
+		// Set when the page was reloaded because an action referred to a
+		// waypoint that had already gone.
+		"Stale": r.URL.Query().Get("stale") != "",
 		// Recent trips are offered as a backdrop for the editor: placing a
 		// waypoint on a road you actually drove is far more reliable than
 		// judging it from map tiles alone.
@@ -75,6 +89,10 @@ func (s *Server) updateWaypoint(w http.ResponseWriter, r *http.Request) {
 	}
 
 	route, err := s.svc.Store().ActiveTemplate(ctx)
+	if errors.Is(err, storage.ErrNotFound) {
+		s.staleRoute(w, r)
+		return
+	}
 	if err != nil {
 		s.fail(w, r, err)
 		return
@@ -88,6 +106,10 @@ func (s *Server) updateWaypoint(w http.ResponseWriter, r *http.Request) {
 	wp.TemplateID = route.ID
 
 	if err := s.svc.Store().UpdateWaypoint(ctx, wp); err != nil {
+		if errors.Is(err, storage.ErrNotFound) {
+			s.staleRoute(w, r)
+			return
+		}
 		s.fail(w, r, err)
 		return
 	}
@@ -96,11 +118,20 @@ func (s *Server) updateWaypoint(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) deleteWaypoint(w http.ResponseWriter, r *http.Request) {
 	route, err := s.svc.Store().ActiveTemplate(r.Context())
+	if errors.Is(err, storage.ErrNotFound) {
+		s.staleRoute(w, r)
+		return
+	}
 	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
 	if err := s.svc.Store().DeleteWaypoint(r.Context(), route.ID, r.PathValue("id")); err != nil {
+		// Already gone is the outcome that was asked for, so it is not an error.
+		if errors.Is(err, storage.ErrNotFound) {
+			s.staleRoute(w, r)
+			return
+		}
 		s.fail(w, r, err)
 		return
 	}
@@ -113,11 +144,19 @@ func (s *Server) moveWaypoint(w http.ResponseWriter, r *http.Request) {
 		delta = 1
 	}
 	route, err := s.svc.Store().ActiveTemplate(r.Context())
+	if errors.Is(err, storage.ErrNotFound) {
+		s.staleRoute(w, r)
+		return
+	}
 	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
 	if err := s.svc.Store().MoveWaypoint(r.Context(), route.ID, r.PathValue("id"), delta); err != nil {
+		if errors.Is(err, storage.ErrNotFound) {
+			s.staleRoute(w, r)
+			return
+		}
 		s.fail(w, r, err)
 		return
 	}

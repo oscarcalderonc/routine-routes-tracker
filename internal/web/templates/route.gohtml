@@ -1,5 +1,15 @@
 {{define "content"}}
 <h1>Route</h1>
+
+{{if .Stale}}
+<section class="card notice">
+  <h2>That waypoint had already gone</h2>
+  <p>
+    The page had been open since before it was removed, so there was nothing left to
+    change. It has been reloaded and now shows what is actually stored.
+  </p>
+</section>
+{{end}}
 <p class="muted">
   Waypoints are listed in canonical order. A trip driven the other way is recognised
   automatically and its stretches are numbered the same, so both directions pool together.
@@ -66,6 +76,12 @@
     <label class="check"><input type="checkbox" name="optional"> Optional</label>
     <button class="primary" type="submit">Add</button>
   </form>
+  <p class="muted small">
+    Clicking the map only fills in the coordinates above — the waypoint is not stored
+    until <strong>Add</strong> is pressed, and it then appears in the table. Editing a
+    row in that table likewise takes effect only on <strong>Save</strong>, because every
+    change recomputes each stored trip.
+  </p>
   <p class="muted small">
     An optional waypoint may be missed without marking the trip partial — useful where
     two roads run close enough together that a crossing cannot be told apart reliably.

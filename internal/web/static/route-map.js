@@ -37,10 +37,16 @@
     if (latInput) latInput.value = lat;
     if (lonInput) lonInput.value = lon;
 
+    // Drawn dashed, and labelled, so that it cannot be mistaken for a stored
+    // waypoint: clicking the map only fills in the form above.
     if (pending) map.removeLayer(pending);
     pending = L.circle(e.latlng, {
       radius: 25, color: '#1f8a4c', weight: 2, dashArray: '4 3', fillOpacity: 0.1,
     }).addTo(map);
+    pending.bindTooltip('Not saved yet — press Add', { permanent: true, direction: 'top' }).openTooltip();
+
+    const label = document.querySelector('input[name="label"]');
+    if (label && !label.value) label.focus();
   });
 
   let backdrop = null;
@@ -60,4 +66,26 @@
         });
     });
   }
+})();
+
+// Marks a waypoint row as edited until it is saved. Every change recomputes each
+// stored trip, so saving is deliberate rather than automatic, which makes it
+// worth showing when a change is still only on screen.
+(function () {
+  document.querySelectorAll('tr').forEach(function (row) {
+    const save = row.querySelector('button[form]');
+    if (!save) return;
+
+    const formID = save.getAttribute('form');
+    row.querySelectorAll('input[form="' + formID + '"]').forEach(function (input) {
+      input.addEventListener('input', function () {
+        save.classList.add('primary');
+        save.textContent = 'Save *';
+      });
+      input.addEventListener('change', function () {
+        save.classList.add('primary');
+        save.textContent = 'Save *';
+      });
+    });
+  });
 })();
