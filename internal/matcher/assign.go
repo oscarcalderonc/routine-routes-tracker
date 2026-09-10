@@ -36,6 +36,10 @@ type Result struct {
 	// lower is a better fit.
 	Score  float64
 	Status domain.TripStatus
+	// TrackEnd is the number of leading track points that belong to the
+	// journey. Anything after it was recorded once the destination had already
+	// been reached and is excluded from every measurement.
+	TrackEnd int
 }
 
 // Match finds the best interpretation of a track against a route template.
@@ -46,7 +50,11 @@ type Result struct {
 func Match(tmpl domain.Template, track domain.Track, anchor Anchor) Result {
 	wps := tmpl.Waypoints
 	if len(wps) == 0 || len(track.Points) == 0 {
-		return Result{Direction: domain.DirectionForward, Status: domain.StatusUnmatched}
+		return Result{
+			Direction: domain.DirectionForward,
+			Status:    domain.StatusUnmatched,
+			TrackEnd:  len(track.Points),
+		}
 	}
 
 	// Passes depend only on the waypoint, not on the order it is visited in,
@@ -65,7 +73,9 @@ func Match(tmpl domain.Template, track domain.Track, anchor Anchor) Result {
 		best, dir = reverse, domain.DirectionReverse
 	}
 
-	return buildResult(wps, track, passes, best, dir, anchor)
+	trackEnd := takeFirstArrival(passes, best, dir, len(track.Points))
+
+	return buildResult(wps, track, passes, best, dir, anchor, trackEnd)
 }
 
 // choice records, for each waypoint, the index of the pass assigned to it, or
@@ -151,6 +161,70 @@ func assign(passes [][]Pass) choice {
 	return result
 }
 
+// takeFirstArrival settles the destination on the first time the track reached
+// it, and reports how much of the track belongs to the journey.
+//
+// A recorder left running after arrival keeps producing fixes, and parking or
+// driving on afterwards often carries the track back through the final waypoint.
+// Both passes then match equally well, so the choice between them would fall to
+// an incidental tiebreak and could put the end of the journey at the second one,
+// inflating the final stretch by however long the recorder stayed on.
+//
+// Arriving is a one-time event, so the earliest pass is taken. It still has to
+// follow the waypoint before it, which keeps a genuinely premature pass — a
+// route that runs close to its own destination on the way there — from being
+// mistaken for the arrival.
+//
+// Nothing is trimmed unless the route's final waypoint was actually reached. If
+// it was missed there is no arrival to trim at, and cutting the track at the
+// last waypoint that did match would throw away the stretch around the one that
+// did not, which is precisely the part needed on the map to work out why.
+func takeFirstArrival(passes [][]Pass, c choice, dir domain.Direction, points int) int {
+	dest := len(passes) - 1
+	if dir == domain.DirectionReverse {
+		dest = 0
+	}
+	if dest < 0 || c.picks[dest] < 0 {
+		return points
+	}
+
+	chosen := c.picks[dest]
+	prev := matchedBefore(c.picks, dir, dest)
+	for j, cand := range passes[dest] {
+		if !cand.EnterAt.Before(passes[dest][chosen].EnterAt) {
+			continue
+		}
+		if prev >= 0 && cand.EnterAt.Before(passes[prev][c.picks[prev]].ExitAt) {
+			continue
+		}
+		chosen = j
+	}
+	c.picks[dest] = chosen
+
+	// Keep the fix just beyond the crossing so the drawn path still reaches the
+	// waypoint, and drop everything after it.
+	if end := passes[dest][chosen].EnterIndex + 2; end < points {
+		return end
+	}
+	return points
+}
+
+// matchedBefore returns the canonical index of the last waypoint reached before
+// the given one, in the order the track actually ran, or -1 if it was the first.
+// On a reverse run the waypoint reached earlier is the higher numbered one.
+func matchedBefore(picks []int, dir domain.Direction, of int) int {
+	step := -1
+	if dir == domain.DirectionReverse {
+		step = 1
+	}
+	for i := of + step; i >= 0 && i < len(picks); i += step {
+		if picks[i] >= 0 {
+			return i
+		}
+	}
+	return -1
+}
+
 // better reports whether a beats b: more waypoints matched wins, and a closer
 // overall fit breaks the tie.
 func better(a, b choice) bool {
@@ -176,10 +250,11 @@ func unreverse(c choice, n int) {
 	}
 }
 
-func buildResult(wps []domain.Waypoint, track domain.Track, passes [][]Pass, c choice, dir domain.Direction, anchor Anchor) Result {
+func buildResult(wps []domain.Waypoint, track domain.Track, passes [][]Pass, c choice, dir domain.Direction, anchor Anchor, trackEnd int) Result {
 	start := track.Points[0].Time
 
-	res := Result{Direction: dir}
+	res := Result{Direction: dir, TrackEnd: trackEnd}
+	var totalDistance float64
 	var missedRequired int
 	for i, wp := range wps {
 		j := c.picks[i]
@@ -191,6 +266,7 @@ func buildResult(wps []domain.Waypoint, track domain.Track, passes [][]Pass, c c
 		}
 
 		p := passes[i][j]
+		totalDistance += p.MinDistanceM
 		at := p.EnterAt
 		if anchor == AnchorClosest {
 			at = p.ClosestAt
@@ -210,7 +286,7 @@ func buildResult(wps []domain.Waypoint, track domain.Track, passes [][]Pass, c c
 
 	res.MatchedCount = len(res.Crossings)
 	if res.MatchedCount > 0 {
-		res.Score = c.dist / float64(res.MatchedCount)
+		res.Score = totalDistance / float64(res.MatchedCount)
 	}
 
 	switch {

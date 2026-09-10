@@ -59,10 +59,30 @@ and both directions pool into one bucket. They can still be separated with the
 direction filter, which is worth doing if a road is plausibly jammed one way and
 clear the other at the same hour.
 
-**Nothing is discarded.** If a waypoint is never reached, the trip is recorded
-as partial and the stretches touching that waypoint carry no duration — not a
-zero, and never folded into a neighbouring stretch. Unusually slow journeys are
-flagged in the charts but kept: a drive that took twice as long really did.
+**The journey ends on arrival.** A recorder left running after you park keeps
+producing fixes, and driving on afterwards often carries the track back through
+the final waypoint. The earliest pass of that waypoint is taken as the arrival,
+and everything after it is excluded from the duration, the distance and the
+drawn path, so forgetting to stop recording does not read as a slower drive. The
+arrival still has to follow the waypoint before it, so a route that runs close to
+its own destination on the way there is not mistaken for having arrived early.
+Nothing is trimmed when the final waypoint was missed altogether — there is no
+arrival to trim at, and the track around the missed waypoint is exactly what the
+map needs to show in order to work out why.
+
+**A recording that does not follow the route is ignored.** Reaching fewer than
+two waypoints means no stretch can be measured, which is what a test recording
+or an unrelated drive looks like, so no trip is created. The file is still
+recorded as seen and is not considered again on the next refresh. Ignored
+recordings are listed on the dashboard with a **Reconsider** button, because one
+skipped while the waypoints were still being placed deserves a second look once
+they are right.
+
+**Nothing else is discarded.** If a waypoint in the middle is never reached, the
+trip is recorded as partial and the stretches touching that waypoint carry no
+duration — not a zero, and never folded into a neighbouring stretch. Unusually
+slow journeys are flagged in the charts but kept: a drive that took twice as long
+really did.
 
 ## Importing recordings
 

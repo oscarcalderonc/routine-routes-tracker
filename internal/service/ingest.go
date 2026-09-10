@@ -10,6 +10,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -55,8 +56,13 @@ func (s *Service) Ingest(ctx context.Context, filename string, data []byte) (dom
 		return domain.Trip{}, err
 	}
 
-	trip := s.measure(tmpl, track, filename, sha)
-	payload, points, err := encodeTrack(track)
+	trip, journey := s.measure(tmpl, track, filename, sha)
+	if trip.Status == domain.StatusUnmatched {
+		return domain.Trip{}, fmt.Errorf("%w: reached %d of %d waypoints",
+			ErrNotOnRoute, trip.MatchedWaypoints, len(tmpl.Waypoints))
+	}
+
+	payload, points, err := encodeTrack(journey)
 	if err != nil {
 		return domain.Trip{}, err
 	}
@@ -66,14 +72,27 @@ func (s *Service) Ingest(ctx context.Context, filename string, data []byte) (dom
 	return trip, nil
 }
 
+// ErrNotOnRoute reports a recording that reached fewer than two waypoints, so no
+// stretch of the route can be measured from it. Such a recording is not stored
+// as a trip, but the file it came from is still recorded as seen.
+var ErrNotOnRoute = errors.New("recording does not follow the route")
+
 // measure runs the matcher over a track and assembles the trip record. It does
 // not touch the database, so it is also what recomputation uses.
-func (s *Service) measure(tmpl domain.Template, track domain.Track, filename, sha string) domain.Trip {
+//
+// It returns the journey alongside the trip: the leading part of the track that
+// ends when the destination was first reached. Anything the recorder captured
+// after that — parking, or driving on before it was stopped — is excluded from
+// the duration, the distance and the drawn path, so leaving it running does not
+// show up as a slower drive.
+func (s *Service) measure(tmpl domain.Template, track domain.Track, filename, sha string) (domain.Trip, domain.Track) {
 	res := matcher.Match(tmpl, track, s.anchor)
-	segments := matcher.BuildSegments(tmpl, res, track, s.loc)
 
-	start := track.Points[0].Time
-	end := track.Points[len(track.Points)-1].Time
+	journey := domain.Track{Points: track.Points[:res.TrackEnd], RawCount: track.RawCount}
+	segments := matcher.BuildSegments(tmpl, res, journey, s.loc)
+
+	start := journey.Points[0].Time
+	end := journey.Points[len(journey.Points)-1].Time
 	local := start.In(s.loc)
 
 	trip := domain.Trip{
@@ -89,7 +108,7 @@ func (s *Service) measure(tmpl domain.Template, track domain.Track, filename, sh
 		LocalHour:        local.Hour(),
 		Direction:        res.Direction,
 		PointCount:       track.RawCount,
-		KeptPointCount:   len(track.Points),
+		KeptPointCount:   len(journey.Points),
 		DurationS:        end.Sub(start).Seconds(),
 		Status:           res.Status,
 		MatchedWaypoints: res.MatchedCount,
@@ -98,7 +117,7 @@ func (s *Service) measure(tmpl domain.Template, track domain.Track, filename, sh
 		Segments:         segments,
 		ProcessedAt:      time.Now().UTC(),
 	}
-	trip.DistanceM, trip.MinLat, trip.MinLon, trip.MaxLat, trip.MaxLon = extent(track)
+	trip.DistanceM, trip.MinLat, trip.MinLon, trip.MaxLat, trip.MaxLon = extent(journey)
 
 	for i := range trip.Crossings {
 		trip.Crossings[i].TripID = trip.ID
@@ -106,7 +125,7 @@ func (s *Service) measure(tmpl domain.Template, track domain.Track, filename, sh
 	for i := range trip.Segments {
 		trip.Segments[i].TripID = trip.ID
 	}
-	return trip
+	return trip, journey
 }
 
 // extent returns the length of a track and its bounding box.

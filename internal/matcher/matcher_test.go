@@ -358,3 +358,132 @@ func TestMatch_EmptyTemplate(t *testing.T) {
 		t.Errorf("Status = %q, want unmatched for a template with no waypoints", res.Status)
 	}
 }
+
+// TestMatch_RecorderLeftRunningAfterArrival covers forgetting to stop the
+// recorder: the track reaches the destination, then carries on and comes back
+// through it. The journey must end at the first arrival, not the second.
+func TestMatch_RecorderLeftRunningAfterArrival(t *testing.T) {
+	tmpl := lineTemplate([]float64{0, 500, 1000}, 20)
+	t0 := time.Date(2026, 9, 10, 6, 30, 0, 0, time.UTC)
+
+	drive := eastTrack(t0, -100, 1100, 70, 50, 5)
+	arrival := drive.Points[len(drive.Points)-1].Time
+
+	// Five minutes parked, then a wander that crosses the destination again,
+	// this time passing closer to its centre than the real arrival did so that
+	// an incidental tiebreak would prefer it.
+	wander := eastTrack(arrival.Add(5*time.Minute), 1100, 900, 70, 20, 0)
+	back := eastTrack(wander.Points[len(wander.Points)-1].Time.Add(time.Minute), 900, 1100, 70, 20, 0)
+
+	combined := domain.Track{Points: drive.Points}
+	combined.Points = append(combined.Points, wander.Points...)
+	combined.Points = append(combined.Points, back.Points...)
+	combined.RawCount = len(combined.Points)
+
+	res := Match(tmpl, combined, AnchorEntry)
+
+	if res.MatchedCount != 3 {
+		t.Fatalf("MatchedCount = %d, want 3", res.MatchedCount)
+	}
+	if res.Direction != domain.DirectionForward {
+		t.Errorf("Direction = %q, want forward", res.Direction)
+	}
+
+	// The destination crossing must be the one from the real drive.
+	dest, ok := crossingFor(res, "wp2")
+	if !ok {
+		t.Fatal("the destination was not matched")
+	}
+	if dest.CrossedAt.After(arrival) {
+		t.Errorf("destination crossed at %v, after the drive ended at %v: the later pass was chosen",
+			dest.CrossedAt, arrival)
+	}
+
+	// The trailing fixes must be excluded from the journey.
+	if res.TrackEnd >= len(combined.Points) {
+		t.Errorf("TrackEnd = %d of %d points; the trailing fixes were kept",
+			res.TrackEnd, len(combined.Points))
+	}
+	if last := combined.Points[res.TrackEnd-1].Time; last.After(arrival.Add(time.Minute)) {
+		t.Errorf("journey ends at %v, well after arrival at %v", last, arrival)
+	}
+
+	// And the final stretch must be the real one, not stretched by the wait.
+	segs := BuildSegments(tmpl, res, domain.Track{Points: combined.Points[:res.TrackEnd]}, time.UTC)
+	if len(segs) != 2 {
+		t.Fatalf("got %d stretches, want 2", len(segs))
+	}
+	for i, sg := range segs {
+		if sg.DurationS == nil {
+			t.Fatalf("stretch %d was not measured", i)
+		}
+		if *sg.DurationS > 60 {
+			t.Errorf("stretch %d took %.0f s, want about 36 s: the idle time leaked in", i, *sg.DurationS)
+		}
+	}
+}
+
+// TestMatch_ArrivalIsNotTakenBeforeTheWaypointBeforeIt guards the other side of
+// taking the earliest arrival: a pass that happens before the preceding waypoint
+// was reached is not the arrival and must not be chosen.
+func TestMatch_ArrivalIsNotTakenBeforeTheWaypointBeforeIt(t *testing.T) {
+	tmpl := lineTemplate([]float64{0, 500, 1000}, 20)
+	t0 := time.Date(2026, 9, 10, 6, 30, 0, 0, time.UTC)
+
+	// Start beyond the destination, double back to the start, then drive the
+	// route properly. The first pass of the destination precedes everything.
+	approach := eastTrack(t0, 1100, -100, 70, 50, 5)
+	drive := eastTrack(approach.Points[len(approach.Points)-1].Time.Add(time.Minute), -100, 1100, 70, 50, 5)
+
+	combined := domain.Track{Points: append(approach.Points, drive.Points...)}
+	combined.RawCount = len(combined.Points)
+
+	res := Match(tmpl, combined, AnchorEntry)
+	if res.MatchedCount != 3 {
+		t.Fatalf("MatchedCount = %d, want 3", res.MatchedCount)
+	}
+
+	first, _ := crossingFor(res, "wp0")
+	dest, _ := crossingFor(res, "wp2")
+	if !dest.CrossedAt.After(first.CrossedAt) {
+		t.Errorf("destination crossed at %v, before the first waypoint at %v",
+			dest.CrossedAt, first.CrossedAt)
+	}
+}
+
+func TestMatch_TrackEndCoversTheWholeTrackWhenNothingTrails(t *testing.T) {
+	tmpl := lineTemplate([]float64{0, 500, 1000}, 20)
+	t0 := time.Date(2026, 9, 10, 6, 30, 0, 0, time.UTC)
+	// Stop recording just past the destination, as one would.
+	track := eastTrack(t0, -100, 1050, 70, 50, 5)
+
+	res := Match(tmpl, track, AnchorEntry)
+	if res.MatchedCount != 3 {
+		t.Fatalf("MatchedCount = %d, want 3", res.MatchedCount)
+	}
+	if res.TrackEnd != len(track.Points) {
+		t.Errorf("TrackEnd = %d, want all %d points when the recording ends on arrival",
+			res.TrackEnd, len(track.Points))
+	}
+}
+
+// TestMatch_NoTrimmingWhenTheDestinationWasMissed is the other half of the rule.
+// With the final waypoint unreachable there is no arrival to trim at, and the
+// track around the missed waypoint must survive: it is what the map needs to
+// show in order to work out why it was missed.
+func TestMatch_NoTrimmingWhenTheDestinationWasMissed(t *testing.T) {
+	tmpl := lineTemplate([]float64{0, 500, 1000}, 20)
+	tmpl.Waypoints[2].Lat = testLat + metresToDegLat(300)
+
+	t0 := time.Date(2026, 9, 10, 6, 30, 0, 0, time.UTC)
+	track := eastTrack(t0, -100, 1100, 70, 50, 5)
+
+	res := Match(tmpl, track, AnchorEntry)
+	if res.Status != domain.StatusPartial {
+		t.Fatalf("Status = %q, want partial", res.Status)
+	}
+	if res.TrackEnd != len(track.Points) {
+		t.Errorf("TrackEnd = %d of %d: the track was trimmed even though the destination was never reached",
+			res.TrackEnd, len(track.Points))
+	}
+}

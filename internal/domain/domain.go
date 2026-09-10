@@ -196,4 +196,8 @@ const (
 	// FileStatusError means the file could not be ingested and will not be
 	// retried automatically.
 	FileStatusError = "error"
+	// FileStatusIgnored means the file parsed but did not describe a journey
+	// along the route, so no trip was created. It is recorded all the same so
+	// that it is not considered again on the next refresh.
+	FileStatusIgnored = "ignored"
 )

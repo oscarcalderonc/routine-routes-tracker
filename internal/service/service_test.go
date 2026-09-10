@@ -65,6 +65,52 @@ func writeGPX(t *testing.T, dir string, start time.Time, fromM, toM float64) str
 	return name
 }
 
+// writeGPXWithTail records a drive along the route and then keeps recording:
+// five minutes stationary at the destination followed by a slow loop back
+// through it, as happens when the recorder is not stopped on arrival.
+func writeGPXWithTail(t *testing.T, dir string, start time.Time) string {
+	t.Helper()
+
+	const spacingM = 70.0
+	var b strings.Builder
+	b.WriteString(`<?xml version="1.0"?>` + "\n")
+	b.WriteString(`<gpx version="1.1" creator="test"><trk><trkseg>` + "\n")
+
+	elapsed := 0.0
+	write := func(offsetM float64) {
+		ts := start.Add(time.Duration(elapsed * float64(time.Second)))
+		fmt.Fprintf(&b, `<trkpt lat="%.7f" lon="%.7f"><time>%s</time><hdop>1.2</hdop></trkpt>`+"\n",
+			testLat+degLat(5), testLon+degLon(offsetM), ts.UTC().Format(time.RFC3339))
+	}
+
+	// The drive: -100 m to 1100 m at 50 km/h.
+	for d := -100.0; d <= 1100; d += spacingM {
+		write(d)
+		elapsed += spacingM / (50.0 / 3.6)
+	}
+	// Sitting at the destination with the recorder still on.
+	for range 10 {
+		write(1080)
+		elapsed += 30
+	}
+	// Then a slow loop that carries the track back through the destination.
+	for d := 1080.0; d >= 900; d -= spacingM {
+		write(d)
+		elapsed += spacingM / (15.0 / 3.6)
+	}
+	for d := 900.0; d <= 1100; d += spacingM {
+		write(d)
+		elapsed += spacingM / (15.0 / 3.6)
+	}
+	b.WriteString(`</trkseg></trk></gpx>` + "\n")
+
+	name := start.UTC().Format("20060102150405") + ".gpx"
+	if err := os.WriteFile(filepath.Join(dir, name), []byte(b.String()), 0o644); err != nil {
+		t.Fatalf("write recording: %v", err)
+	}
+	return name
+}
+
 func newTestService(t *testing.T) (*Service, *storage.Store) {
 	t.Helper()
 
@@ -205,9 +251,9 @@ func TestRefresh_RecordsUnreadableFilesWithoutRetrying(t *testing.T) {
 		t.Fatalf("outcomes = %+v, want one failure", p.Outcomes)
 	}
 
-	failed, err := store.FailedFiles(ctx, 10)
+	failed, err := store.SkippedFiles(ctx, 10)
 	if err != nil || len(failed) != 1 {
-		t.Fatalf("FailedFiles = %v, %v; want one record", failed, err)
+		t.Fatalf("SkippedFiles = %v, %v; want one record", failed, err)
 	}
 
 	// The failure is remembered, so the next refresh does not try again.
@@ -331,5 +377,137 @@ func TestFileTime(t *testing.T) {
 
 	if _, ok := FileTime("holiday-drive.gpx"); ok {
 		t.Error("an arbitrary name should not yield a time")
+	}
+}
+
+func TestRefresh_IgnoresRecordingsThatDoNotFollowTheRoute(t *testing.T) {
+	svc, store := newTestService(t)
+	seedRoute(t, store, 0, 500, 1000, 1500)
+	ctx := t.Context()
+
+	// A short demo recording that only ever reaches the first waypoint.
+	writeGPX(t, svc.inboxDir, time.Date(2026, 9, 10, 6, 30, 0, 0, time.UTC), -100, 150)
+	// And a real drive, to show the two are told apart.
+	writeGPX(t, svc.inboxDir, time.Date(2026, 9, 10, 13, 0, 0, 0, time.UTC), -100, 1600)
+
+	svc.Refresh(ctx)
+
+	outcomes := map[string]int{}
+	for _, o := range svc.Progress().Outcomes {
+		outcomes[o.Status]++
+	}
+	if outcomes[OutcomeIgnored] != 1 || outcomes[OutcomeImported] != 1 {
+		t.Fatalf("outcomes = %v, want one ignored and one imported", outcomes)
+	}
+
+	trips, err := store.ListTrips(ctx, storage.TripFilter{})
+	if err != nil {
+		t.Fatalf("list trips: %v", err)
+	}
+	if len(trips) != 1 {
+		t.Fatalf("got %d trips, want 1: the demo recording should not have become a trip", len(trips))
+	}
+	if trips[0].Status != domain.StatusMatched {
+		t.Errorf("the stored trip has status %q, want matched", trips[0].Status)
+	}
+
+	// The ignored file is still recorded as seen, so it is not reconsidered.
+	svc.Refresh(ctx)
+	if p := svc.Progress(); p.Total != 0 {
+		t.Errorf("an ignored file was reconsidered: %d files", p.Total)
+	}
+
+	skipped, err := store.SkippedFiles(ctx, 10)
+	if err != nil || len(skipped) != 1 {
+		t.Fatalf("SkippedFiles = %v, %v; want the one ignored file", skipped, err)
+	}
+	if skipped[0].Status != domain.FileStatusIgnored {
+		t.Errorf("status = %q, want %q", skipped[0].Status, domain.FileStatusIgnored)
+	}
+}
+
+func TestRetry_ReconsidersAnIgnoredRecording(t *testing.T) {
+	svc, store := newTestService(t)
+	ctx := t.Context()
+
+	// A route whose waypoints are nowhere near the recording, as it would be
+	// before the waypoints have been placed properly.
+	tmpl := seedRoute(t, store, 0, 500)
+	for _, w := range tmpl.Waypoints {
+		w.Lat = testLat + degLat(5000)
+		if err := store.UpdateWaypoint(ctx, w); err != nil {
+			t.Fatalf("update waypoint: %v", err)
+		}
+	}
+
+	name := writeGPX(t, svc.inboxDir, time.Date(2026, 9, 10, 6, 30, 0, 0, time.UTC), -100, 600)
+	svc.Refresh(ctx)
+
+	if trips, _ := store.ListTrips(ctx, storage.TripFilter{}); len(trips) != 0 {
+		t.Fatalf("got %d trips, want 0 while the route is misplaced", len(trips))
+	}
+
+	// Put the waypoints where the road actually is, then reconsider the file.
+	current, _ := store.ActiveTemplate(ctx)
+	for i, w := range current.Waypoints {
+		w.Lat = testLat
+		w.Lon = testLon + degLon(float64(i)*500)
+		if err := store.UpdateWaypoint(ctx, w); err != nil {
+			t.Fatalf("update waypoint: %v", err)
+		}
+	}
+
+	if err := svc.Retry(ctx, name); err != nil {
+		t.Fatalf("Retry returned %v", err)
+	}
+
+	trips, err := store.ListTrips(ctx, storage.TripFilter{})
+	if err != nil {
+		t.Fatalf("list trips: %v", err)
+	}
+	if len(trips) != 1 {
+		t.Fatalf("got %d trips after retrying, want 1", len(trips))
+	}
+	if trips[0].Status != domain.StatusMatched {
+		t.Errorf("status = %q, want matched once the waypoints are in place", trips[0].Status)
+	}
+}
+
+// TestRefresh_TrimsFixesRecordedAfterArrival is the end-to-end form of leaving
+// the recorder running: the extra fixes must not appear in the trip's duration,
+// its distance, or the path drawn on the map.
+func TestRefresh_TrimsFixesRecordedAfterArrival(t *testing.T) {
+	svc, store := newTestService(t)
+	seedRoute(t, store, 0, 500, 1000)
+	ctx := t.Context()
+
+	start := time.Date(2026, 9, 10, 6, 30, 0, 0, time.UTC)
+	writeGPXWithTail(t, svc.inboxDir, start)
+	svc.Refresh(ctx)
+
+	trips, err := store.ListTrips(ctx, storage.TripFilter{})
+	if err != nil || len(trips) != 1 {
+		t.Fatalf("ListTrips = %v, %v; want one trip", trips, err)
+	}
+	trip, err := store.Trip(ctx, trips[0].ID)
+	if err != nil {
+		t.Fatalf("load trip: %v", err)
+	}
+
+	// The drive itself is 1200 m at 50 km/h, about 86 s. The recording runs for
+	// a further ten minutes.
+	if trip.DurationS > 180 {
+		t.Errorf("trip duration = %.0f s; the idle tail was counted", trip.DurationS)
+	}
+	if trip.EndedAt.After(start.Add(3 * time.Minute)) {
+		t.Errorf("trip ends at %v, long after the drive did", trip.EndedAt)
+	}
+	for _, sg := range trip.Segments {
+		if sg.DurationS == nil {
+			t.Fatalf("stretch %d was not measured", sg.Seq)
+		}
+		if *sg.DurationS > 60 {
+			t.Errorf("stretch %d took %.0f s, want about 36 s", sg.Seq, *sg.DurationS)
+		}
 	}
 }

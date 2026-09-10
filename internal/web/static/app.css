@@ -126,7 +126,7 @@ td.actions, .actions { display: flex; gap: 6px; align-items: center; }
   font-size: 12px; font-weight: 600; background: var(--surface-2); color: var(--muted);
 }
 .badge.matched, .badge.imported { background: rgba(31,138,76,.15); color: var(--ok); }
-.badge.partial { background: rgba(183,121,31,.15); color: var(--warn); }
+.badge.partial, .badge.ignored { background: rgba(183,121,31,.15); color: var(--warn); }
 .badge.unmatched, .badge.failed, .badge.error { background: rgba(192,57,43,.15); color: var(--danger); }
 .badge.subtle { font-weight: 500; }
 

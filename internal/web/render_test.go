@@ -77,6 +77,10 @@ func TestRenderPages(t *testing.T) {
 			"Title": "Dashboard", "Nav": "dashboard", "Report": report,
 			"Trips": []domain.Trip{trip}, "Counts": map[string]int{string(domain.StatusMatched): 8},
 			"Stale": 2, "LastRefresh": time.Now(), "Route": route, "RouteDefined": true,
+			"Skipped": []domain.ProcessedFile{{
+				Filename: "20260910063000.gpx", FileTimeUTC: time.Now(),
+				Status: domain.FileStatusIgnored, ErrorMessage: "reached 1 of 4 waypoints",
+			}},
 			"DriveConfigured": true, "From": "2026-06-01", "To": "2026-09-09",
 			"Progress": service.Progress{}, "Location": "America/El_Salvador",
 		},

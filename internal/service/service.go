@@ -97,6 +97,9 @@ const (
 	OutcomeSkipped = "skipped"
 	// OutcomeFailed means the file could not be read.
 	OutcomeFailed = "failed"
+	// OutcomeIgnored means the file was readable but did not follow the route,
+	// so it produced no trip.
+	OutcomeIgnored = "ignored"
 )
 
 // Progress describes a refresh, whether running or finished.
@@ -234,12 +237,21 @@ func (s *Service) ingestFile(ctx context.Context, name string) FileOutcome {
 	}
 	outcome := FileOutcome{Filename: name}
 
-	if err != nil {
+	switch {
+	case errors.Is(err, ErrNotOnRoute):
+		// Not a failure: the recording is readable but describes something other
+		// than the route, such as a test recording. No trip is created, and the
+		// file is recorded as seen so that it is not considered again.
+		record.Status = domain.FileStatusIgnored
+		record.ErrorMessage = err.Error()
+		outcome.Status, outcome.Detail = OutcomeIgnored, err.Error()
+		s.log.Info("ignoring recording that does not follow the route", "file", name, "reason", err)
+	case err != nil:
 		record.Status = domain.FileStatusError
 		record.ErrorMessage = err.Error()
 		outcome.Status, outcome.Detail = OutcomeFailed, err.Error()
 		s.log.Warn("could not import recording", "file", name, "error", err)
-	} else {
+	default:
 		record.Status = domain.FileStatusOK
 		record.TripID = trip.ID
 		outcome.Status = OutcomeImported
@@ -325,7 +337,16 @@ func (s *Service) reprocessTrip(ctx context.Context, tmpl domain.Template, tripI
 		return err
 	}
 
-	trip := s.measure(tmpl, track, existing.SourceFilename, sha)
+	trip, journey := s.measure(tmpl, track, existing.SourceFilename, sha)
+	if trip.Status == domain.StatusUnmatched {
+		// The route has been edited to the point where this recording no longer
+		// follows it. Keeping it would leave a trip that measures nothing, so it
+		// goes; the source file stays on disk and recorded as seen.
+		s.log.Info("removing trip that no longer follows the route",
+			"trip", existing.ID, "file", existing.SourceFilename)
+		return s.store.DeleteTrip(ctx, existing.ID)
+	}
+
 	// Keep the identity of the existing trip so that anything referring to it
 	// stays valid; only the measurements are replaced.
 	trip.ID = existing.ID
@@ -336,7 +357,7 @@ func (s *Service) reprocessTrip(ctx context.Context, tmpl domain.Template, tripI
 		trip.Segments[i].TripID = trip.ID
 	}
 
-	payload, points, err := encodeTrack(track)
+	payload, points, err := encodeTrack(journey)
 	if err != nil {
 		return err
 	}
@@ -354,4 +375,24 @@ func (s *Service) StaleCount(ctx context.Context) (int, error) {
 	}
 	ids, err := s.store.StaleTripIDs(ctx, tmpl.ID, tmpl.Version, matcher.AlgoVersion)
 	return len(ids), err
+}
+
+// SkippedFiles returns the recordings that produced no trip.
+func (s *Service) SkippedFiles(ctx context.Context, limit int) ([]domain.ProcessedFile, error) {
+	return s.store.SkippedFiles(ctx, limit)
+}
+
+// Retry forgets that a file was seen and imports it again.
+//
+// It exists because a recording skipped for not following the route is still
+// recorded as seen, which is what stops it being reconsidered on every refresh.
+// That is the right default, but while the route is still being set up a
+// recording may have been skipped only because the waypoints were not yet in the
+// right place, and it has to be possible to change one's mind.
+func (s *Service) Retry(ctx context.Context, filename string) error {
+	if err := s.store.Forget(ctx, filename); err != nil {
+		return err
+	}
+	s.Refresh(ctx)
+	return nil
 }

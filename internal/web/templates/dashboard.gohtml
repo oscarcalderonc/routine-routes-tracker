@@ -73,6 +73,35 @@
 </section>
 {{end}}
 
+{{if .Skipped}}
+<section class="card">
+  <h2>Recordings that produced no trip</h2>
+  <p class="muted">
+    Kept out of the statistics and not looked at again. A recording is ignored when it
+    reaches fewer than two waypoints, which is what a test recording or an unrelated
+    drive looks like. If one was skipped only because the waypoints were not yet in the
+    right place, put them right and reconsider it here.
+  </p>
+  <table>
+    <thead><tr><th>File</th><th>Recorded</th><th>Why</th><th></th></tr></thead>
+    <tbody>
+    {{range .Skipped}}
+      <tr>
+        <td><code>{{.Filename}}</code></td>
+        <td class="num">{{datetime .FileTimeUTC}}</td>
+        <td><span class="badge {{.Status}}">{{.Status}}</span> <span class="muted">{{.ErrorMessage}}</span></td>
+        <td>
+          <form method="post" action="/files/{{.Filename}}/retry">
+            <button>Reconsider</button>
+          </form>
+        </td>
+      </tr>
+    {{end}}
+    </tbody>
+  </table>
+</section>
+{{end}}
+
 <section class="card">
   <h2>Recent trips</h2>
   {{if .Trips}}

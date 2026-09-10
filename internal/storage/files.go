@@ -75,15 +75,20 @@ func (s *Store) Forget(ctx context.Context, filename string) error {
 	return nil
 }
 
-// FailedFiles returns files that could not be ingested, most recent first.
-func (s *Store) FailedFiles(ctx context.Context, limit int) ([]domain.ProcessedFile, error) {
+// SkippedFiles returns files that produced no trip, most recent first, whether
+// because they could not be read or because they did not follow the route.
+//
+// They are listed so that a recording skipped while the route was still being
+// set up can be reconsidered afterwards, rather than being invisible because it
+// is recorded as seen.
+func (s *Store) SkippedFiles(ctx context.Context, limit int) ([]domain.ProcessedFile, error) {
 	const q = `SELECT filename, COALESCE(trip_id, ''), COALESCE(sha256, ''), file_time_utc,
 			processed_at, status, COALESCE(error_message, '')
-		FROM processed_files WHERE status = ? ORDER BY processed_at DESC LIMIT ?`
+		FROM processed_files WHERE status <> ? ORDER BY processed_at DESC LIMIT ?`
 
-	rows, err := s.db.QueryContext(ctx, q, domain.FileStatusError, limit)
+	rows, err := s.db.QueryContext(ctx, q, domain.FileStatusOK, limit)
 	if err != nil {
-		return nil, fmt.Errorf("query failed files: %w", err)
+		return nil, fmt.Errorf("query skipped files: %w", err)
 	}
 	defer rows.Close()
 

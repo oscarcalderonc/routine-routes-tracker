@@ -322,9 +322,9 @@ func TestProcessedFiles(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("MarkProcessed for a failure returned %v", err)
 	}
-	failed, err := s.FailedFiles(ctx, 10)
-	if err != nil || len(failed) != 1 || failed[0].Filename != "broken.gpx" {
-		t.Fatalf("FailedFiles = %v, %v; want the one broken file", failed, err)
+	skipped, err := s.SkippedFiles(ctx, 10)
+	if err != nil || len(skipped) != 1 || skipped[0].Filename != "broken.gpx" {
+		t.Fatalf("SkippedFiles = %v, %v; want the one broken file", skipped, err)
 	}
 
 	if err := s.Forget(ctx, "broken.gpx"); err != nil {

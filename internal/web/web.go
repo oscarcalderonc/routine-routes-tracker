@@ -10,6 +10,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -46,6 +47,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /{$}", s.dashboard)
 	mux.HandleFunc("POST /refresh", s.startRefresh)
 	mux.HandleFunc("GET /refresh/status", s.refreshStatus)
+	mux.HandleFunc("POST /files/{name}/retry", s.retryFile)
 
 	mux.HandleFunc("GET /trips", s.listTrips)
 	mux.HandleFunc("GET /trips/{id}", s.showTrip)
@@ -102,6 +104,11 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
+	skipped, err := s.svc.SkippedFiles(ctx, 20)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
 	route, routeErr := s.svc.Store().ActiveTemplate(ctx)
 
 	s.render.page(w, r, "dashboard.gohtml", map[string]any{
@@ -111,6 +118,7 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 		"Trips":           trips,
 		"Counts":          counts,
 		"Stale":           stale,
+		"Skipped":         skipped,
 		"LastRefresh":     lastRefresh,
 		"Route":           route,
 		"RouteDefined":    routeErr == nil && len(route.Waypoints) >= 2,
@@ -146,6 +154,26 @@ func (s *Server) progressData() map[string]any {
 		// requests at all.
 		"Poll": p.Running,
 	}
+}
+
+// retryFile reconsiders a recording that produced no trip. It is how a file
+// skipped while the route was still being set up gets a second look, which is
+// otherwise impossible because the file is recorded as seen.
+func (s *Server) retryFile(w http.ResponseWriter, r *http.Request) {
+	// The name only ever addresses a file in the inbox, so anything that looks
+	// like a path is refused rather than interpreted.
+	name := r.PathValue("name")
+	if name == "" || name != filepath.Base(name) {
+		http.Error(w, "invalid filename", http.StatusBadRequest)
+		return
+	}
+
+	go func() {
+		if err := s.svc.Retry(s.background, name); err != nil {
+			s.log.Error("could not reconsider recording", "file", name, "error", err)
+		}
+	}()
+	redirect(w, r, "/")
 }
 
 func (s *Server) listTrips(w http.ResponseWriter, r *http.Request) {
