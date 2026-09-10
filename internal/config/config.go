@@ -26,18 +26,17 @@ type Config struct {
 	Location *time.Location
 	// Anchor selects which instant of a waypoint pass bounds a segment.
 	Anchor matcher.Anchor
-	// RcloneBin is the rclone executable used to pull new files.
-	RcloneBin string
-	// RcloneConfig is the path to an rclone configuration file, written from a
-	// secret at startup when RcloneConfigB64 is set.
-	RcloneConfig string
-	// RcloneConfigB64 is a base64-encoded rclone configuration supplied as a
-	// secret.
-	RcloneConfigB64 string
-	// DriveRemote and DriveFolder identify the folder to pull from, as in
-	// "gdrive" and "gpx".
-	DriveRemote string
-	DriveFolder string
+	// DriveFolderID identifies the Google Drive folder to read recordings from.
+	// It is the last path element of the folder's address in Drive. Leaving it
+	// empty disables cloud access; recordings placed in the inbox by any other
+	// means are still imported.
+	DriveFolderID string
+	// GoogleCredentialsB64 is a service account key encoded as base64, which is
+	// how a key is most conveniently carried in an environment variable.
+	GoogleCredentialsB64 string
+	// GoogleCredentialsFile is a path to a service account key, as an
+	// alternative to supplying it inline.
+	GoogleCredentialsFile string
 	// MaxUploadBytes caps the size of a single source file.
 	MaxUploadBytes int64
 }
@@ -65,17 +64,15 @@ func Load() (Config, error) {
 	}
 
 	return Config{
-		Addr:            env("ADDR", ":"+env("PORT", "8381")),
-		DataDir:         dataDir,
-		DBPath:          env("DB_PATH", filepath.Join(dataDir, "tracker.db")),
-		Location:        loc,
-		Anchor:          anchor,
-		RcloneBin:       env("RCLONE_BIN", "rclone"),
-		RcloneConfig:    env("RCLONE_CONFIG", filepath.Join(dataDir, "rclone.conf")),
-		RcloneConfigB64: os.Getenv("RCLONE_CONFIG_B64"),
-		DriveRemote:     env("DRIVE_REMOTE", ""),
-		DriveFolder:     env("DRIVE_FOLDER", ""),
-		MaxUploadBytes:  maxUpload,
+		Addr:                  env("ADDR", ":"+env("PORT", "8381")),
+		DataDir:               dataDir,
+		DBPath:                env("DB_PATH", filepath.Join(dataDir, "tracker.db")),
+		Location:              loc,
+		Anchor:                anchor,
+		DriveFolderID:         env("DRIVE_FOLDER_ID", ""),
+		GoogleCredentialsB64:  os.Getenv("GOOGLE_CREDENTIALS_B64"),
+		GoogleCredentialsFile: env("GOOGLE_CREDENTIALS_FILE", ""),
+		MaxUploadBytes:        maxUpload,
 	}, nil
 }
 

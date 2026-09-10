@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/oscarcalderonc/routine-routes-tracker/internal/domain"
-	"github.com/oscarcalderonc/routine-routes-tracker/internal/drive"
 	"github.com/oscarcalderonc/routine-routes-tracker/internal/geo"
 	"github.com/oscarcalderonc/routine-routes-tracker/internal/matcher"
 	"github.com/oscarcalderonc/routine-routes-tracker/internal/storage"
@@ -123,7 +122,7 @@ func newTestService(t *testing.T) (*Service, *storage.Store) {
 
 	svc, err := New(Options{
 		Store:    store,
-		Puller:   drive.Puller{}, // Not configured: files are read straight from the inbox.
+		Source:   nil, // No cloud folder: files are read straight from the inbox.
 		Location: time.UTC,
 		Anchor:   matcher.AnchorEntry,
 		BlobDir:  filepath.Join(root, "gpx"),

@@ -13,16 +13,28 @@ import (
 	"time"
 
 	"github.com/oscarcalderonc/routine-routes-tracker/internal/domain"
-	"github.com/oscarcalderonc/routine-routes-tracker/internal/drive"
 	"github.com/oscarcalderonc/routine-routes-tracker/internal/matcher"
 	"github.com/oscarcalderonc/routine-routes-tracker/internal/storage"
 )
+
+// Source copies newly recorded files into the inbox directory.
+//
+// It is declared here, where it is used, rather than alongside an
+// implementation. A nil Source means no cloud folder is in use, which is a
+// supported way to run: recordings put into the inbox by any other means are
+// imported just the same.
+type Source interface {
+	// Pull copies anything new into the inbox.
+	Pull(ctx context.Context) error
+	// Configured reports whether a folder has actually been set up.
+	Configured() bool
+}
 
 // Service coordinates importing recordings and keeping their measurements up to
 // date with the route definition.
 type Service struct {
 	store    *storage.Store
-	puller   drive.Puller
+	source   Source
 	loc      *time.Location
 	anchor   matcher.Anchor
 	blobDir  string
@@ -40,7 +52,7 @@ type Service struct {
 // Options configures a Service.
 type Options struct {
 	Store    *storage.Store
-	Puller   drive.Puller
+	Source   Source
 	Location *time.Location
 	Anchor   matcher.Anchor
 	BlobDir  string
@@ -62,7 +74,7 @@ func New(opts Options) (*Service, error) {
 	}
 	return &Service{
 		store:    opts.Store,
-		puller:   opts.Puller,
+		source:   opts.Source,
 		loc:      opts.Location,
 		anchor:   opts.Anchor,
 		blobDir:  opts.BlobDir,
@@ -78,8 +90,8 @@ func (s *Service) Store() *storage.Store { return s.store }
 // Location is the timezone measurements are reported in.
 func (s *Service) Location() *time.Location { return s.loc }
 
-// DriveConfigured reports whether a cloud remote has been set up.
-func (s *Service) DriveConfigured() bool { return s.puller.Configured() }
+// DriveConfigured reports whether a cloud folder has been set up.
+func (s *Service) DriveConfigured() bool { return s.source != nil && s.source.Configured() }
 
 // FileOutcome is what happened to one file during a refresh.
 type FileOutcome struct {
@@ -157,11 +169,13 @@ func (s *Service) Refresh(ctx context.Context) {
 }
 
 func (s *Service) refresh(ctx context.Context) error {
-	if err := s.puller.Pull(ctx); err != nil {
-		// A failed pull is reported but does not stop the import: files already
-		// in the inbox are still worth processing.
-		s.log.Error("pull from remote failed", "error", err)
-		s.setProgress(func(p *Progress) { p.Err = err.Error() })
+	if s.source != nil {
+		if err := s.source.Pull(ctx); err != nil {
+			// A failed pull is reported but does not stop the import: files
+			// already in the inbox are still worth processing.
+			s.log.Error("pull from cloud folder failed", "error", err)
+			s.setProgress(func(p *Progress) { p.Err = err.Error() })
+		}
 	}
 
 	names, err := s.newFiles(ctx)

@@ -53,6 +53,29 @@ func ensureDataDir(dir string) error {
 	return os.Remove(probe)
 }
 
+// driveSource builds the cloud folder reader, or returns nil when none has been
+// configured. Running without one is supported, so an absent configuration is
+// reported and carried on from rather than treated as a failure.
+func driveSource(ctx context.Context, cfg config.Config, log *slog.Logger) (service.Source, error) {
+	client, err := drive.New(ctx, drive.Credentials{
+		Base64: cfg.GoogleCredentialsB64,
+		Path:   cfg.GoogleCredentialsFile,
+	}, cfg.DriveFolderID, cfg.InboxDir())
+
+	switch {
+	case errors.Is(err, drive.ErrNotConfigured):
+		log.Info("no cloud folder configured; recordings are read from the inbox directory",
+			"inbox", cfg.InboxDir())
+		return nil, nil
+	case err != nil:
+		return nil, err
+	}
+
+	log.Info("reading recordings from Google Drive",
+		"folder", cfg.DriveFolderID, "service_account", client.Account())
+	return client, nil
+}
+
 func run(log *slog.Logger) error {
 	cfg, err := config.Load()
 	if err != nil {
@@ -68,25 +91,20 @@ func run(log *slog.Logger) error {
 	if err := ensureDataDir(cfg.DataDir); err != nil {
 		return err
 	}
-	if err := drive.WriteConfig(cfg.RcloneConfig, cfg.RcloneConfigB64); err != nil {
-		return err
-	}
-
 	store, err := storage.Open(ctx, cfg.DBPath)
 	if err != nil {
 		return err
 	}
 	defer store.Close()
 
+	source, err := driveSource(ctx, cfg, log)
+	if err != nil {
+		return err
+	}
+
 	svc, err := service.New(service.Options{
-		Store: store,
-		Puller: drive.Puller{
-			Bin:    cfg.RcloneBin,
-			Config: cfg.RcloneConfig,
-			Remote: cfg.DriveRemote,
-			Folder: cfg.DriveFolder,
-			Dest:   cfg.InboxDir(),
-		},
+		Store:    store,
+		Source:   source,
 		Location: cfg.Location,
 		Anchor:   cfg.Anchor,
 		BlobDir:  cfg.BlobDir(),
@@ -134,7 +152,7 @@ func run(log *slog.Logger) error {
 		"addr", cfg.Addr,
 		"timezone", cfg.Location.String(),
 		"anchor", string(cfg.Anchor),
-		"drive", cfg.DriveRemote != "")
+		"drive", svc.DriveConfigured())
 
 	if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err

@@ -14,10 +14,10 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/tracker
 
 FROM alpine:3.21
 
-# rclone mirrors the cloud folder, tzdata is required because the reporting
-# timezone is looked up by IANA name, and su-exec lets the entrypoint drop
+# tzdata is required because the reporting timezone is looked up by IANA name,
+# ca-certificates to reach the Drive API, and su-exec lets the entrypoint drop
 # privileges after preparing the data directory.
-RUN apk add --no-cache ca-certificates tzdata rclone wget su-exec \
+RUN apk add --no-cache ca-certificates tzdata wget su-exec \
  && adduser -D -u 10001 tracker \
  && mkdir -p /data \
  && chown -R tracker:tracker /data

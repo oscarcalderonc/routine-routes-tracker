@@ -92,18 +92,50 @@ the drive began, `yyyyMMddHHmmss.gpx`, for example `20260909064908.gpx`. **The
 filename is the deduplication key**, so a file is imported exactly once however
 often the folder is synced.
 
-Press **Refresh** on the dashboard. That runs `rclone copy` from the configured
-remote into `$DATA_DIR/inbox`, imports anything not seen before, and recomputes
-whatever the route change queue is holding. It is deliberately manual: the
-recordings arrive twice a day, and a button gives a clear moment to see what
-happened without a scheduler to reason about.
+Press **Refresh** on the dashboard. That lists the Drive folder, downloads
+anything not already in `$DATA_DIR/inbox`, imports whatever has not been seen
+before, and recomputes anything left stale by a route change. It is deliberately
+manual: the recordings arrive twice a day, and a button gives a clear moment to
+see what happened without a scheduler to reason about.
 
 Files that cannot be read are recorded as failures so they are not retried on
 every refresh.
 
-With no remote configured, the tracker still works — anything dropped into
+With no folder configured, the tracker still works — anything dropped into
 `$DATA_DIR/inbox` is picked up on the next refresh. That is the easiest way to
 try it out and to import a backlog.
+
+### Connecting the Drive folder
+
+Access is by **service account**, so there is no consent screen to revisit and no
+refresh token to store. Note that a Drive **API key will not work**: a key
+identifies a project rather than a principal, and can only read public files.
+
+1. In a Google Cloud project, enable the **Google Drive API**.
+2. Create a **service account** and download a **JSON key** for it.
+3. Open the Drive folder holding the recordings and **share it with the service
+   account's address** — the one ending `…iam.gserviceaccount.com` — exactly as
+   you would share with a person. **Viewer** is enough, and is all the tracker
+   asks for: it requests the `drive.readonly` scope and only ever lists that one
+   folder's direct children.
+4. Set `DRIVE_FOLDER_ID` to the last path element of the folder's address, as in
+   `https://drive.google.com/drive/folders/<this part>`, and
+   `GOOGLE_CREDENTIALS_B64` to `base64 -w0 key.json`.
+
+Step 3 is the one that gets forgotten. If it is missed the folder simply is not
+visible to the account, which would otherwise look indistinguishable from an
+empty folder, so the tracker checks the folder before listing it and says which
+address to share with:
+
+```
+drive folder 1AbC… is not readable by tracker@project.iam.gserviceaccount.com;
+share the folder with that address, giving it at least Viewer access
+```
+
+Downloads are written under a temporary name and renamed into place, so an
+interrupted transfer cannot leave a truncated recording that would then be
+treated as seen. Files already in the inbox are never re-downloaded or
+overwritten.
 
 ## Editing the route
 
@@ -138,9 +170,9 @@ Everything is read from the environment.
 | `DB_PATH` | `$DATA_DIR/tracker.db` | SQLite file |
 | `APP_TZ` | `UTC` | IANA zone that dates and hours are reported in |
 | `ANCHOR` | `entry` | `entry` or `closest` — see below |
-| `DRIVE_REMOTE` | — | rclone remote name, e.g. `gdrive` |
-| `DRIVE_FOLDER` | — | Path within the remote to mirror |
-| `RCLONE_CONFIG_B64` | — | Base64 of an `rclone.conf`, written at startup |
+| `DRIVE_FOLDER_ID` | — | Google Drive folder to read, from its address |
+| `GOOGLE_CREDENTIALS_B64` | — | Base64 of a service account key |
+| `GOOGLE_CREDENTIALS_FILE` | — | Path to a service account key, instead of the above |
 | `MAX_UPLOAD_BYTES` | `26214400` | Largest accepted recording |
 
 `APP_TZ` matters more than it looks: hour of day is the main axis of the whole
@@ -188,10 +220,9 @@ if it is a bind mount, run: chown -R 10001:10001 /data
 **Environment.** Set these in Coolify's environment panel, not in the repository:
 
 - `APP_TZ` — your zone: `America/El_Salvador`.
-- `DRIVE_REMOTE`, `DRIVE_FOLDER` and `RCLONE_CONFIG_B64` to pull from cloud
-  storage. Configure the remote once on any machine with `rclone config`, then
-  use `base64 -w0 ~/.config/rclone/rclone.conf` for the last value. It is a
-  credential, so it belongs in the environment panel.
+- `DRIVE_FOLDER_ID` and `GOOGLE_CREDENTIALS_B64` to read the Drive folder; see
+  below. The key is a credential, so it belongs in the environment panel rather
+  than in the repository.
 
 `/healthz` is the health endpoint.
 

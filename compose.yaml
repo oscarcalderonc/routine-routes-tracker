@@ -7,10 +7,9 @@ services:
       - "8381:8381"
     environment:
       APP_TZ: America/El_Salvador
-      # Leave the drive settings unset to work purely from the inbox directory.
-      # DRIVE_REMOTE: gdrive
-      # DRIVE_FOLDER: gpx
-      # RCLONE_CONFIG_B64: ...
+      # Leave these unset to work purely from the inbox directory.
+      # DRIVE_FOLDER_ID: the last path element of the folder's address in Drive
+      # GOOGLE_CREDENTIALS_B64: base64 of the service account key
     volumes:
       # A host path rather than a named volume, so the database and the retained
       # recordings are visible and backup-able directly on the host. The
