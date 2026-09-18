@@ -29,7 +29,7 @@ internal/service       importing, measuring, recomputing, statistics
 internal/web           handlers, templates, static assets (all embedded)
 ```
 
-68 tests across 8 packages. `internal/matcher` is where the real logic lives and
+73 test functions across 8 packages. `internal/matcher` is where the real logic lives and
 carries the most important ones.
 
 ## Decisions that must not be casually undone
@@ -108,6 +108,13 @@ a Drive **API key cannot work** — it identifies a project, not a principal, an
 only reads public files. The folder is checked before listing so that the usual
 mistake (never sharing it) names the address to share with instead of looking
 like an empty folder.
+
+**The route backup CSV holds the route only, never trips.** Trips are derived
+from the recordings, which stay in the cloud folder, so a wiped database is
+recovered by importing the CSV and pressing Refresh. Importing replaces every
+waypoint in one transaction (`storage.ReplaceRoute`) and bumps the version like
+any other edit. A file with fewer than two waypoints is refused, so a wrong file
+cannot empty a working route.
 
 **No authentication**, on the assumption of Tailscale-only access. Keep
 `http.MaxBytesReader` and the `<!DOCTYPE` rejection regardless: unauthenticated

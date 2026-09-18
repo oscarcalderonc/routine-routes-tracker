@@ -58,10 +58,14 @@ type WeekPoint struct {
 
 // TripPoint is a single measurement, for the scatter plot.
 type TripPoint struct {
-	Seq       int     `json:"seq"`
-	TripID    string  `json:"trip_id"`
-	Date      string  `json:"date"`
-	Hour      int     `json:"hour"`
+	Seq    int    `json:"seq"`
+	TripID string `json:"trip_id"`
+	Date   string `json:"date"`
+	Hour   int    `json:"hour"`
+	// LocalTime is when the stretch began, in the reporting timezone and
+	// without an offset, so the chart can place it on a time axis without the
+	// browser reinterpreting it in its own timezone.
+	LocalTime string  `json:"local_time"`
 	Direction string  `json:"direction"`
 	DurationS float64 `json:"duration_s"`
 	// Outlier marks a measurement far from the typical one. Such measurements
@@ -140,7 +144,7 @@ func (s *Service) Stats(ctx context.Context, from, to string, direction domain.D
 
 		rep.Hours = append(rep.Hours, hourCells(seq, group, hoursSeen)...)
 		rep.Weeks = append(rep.Weeks, weekPoints(seq, group, s.loc)...)
-		rep.Trips = append(rep.Trips, tripPoints(seq, group, summary)...)
+		rep.Trips = append(rep.Trips, tripPoints(seq, group, summary, s.loc)...)
 	}
 
 	for h := range hoursSeen {
@@ -225,7 +229,7 @@ func weekPoints(seq int, group []domain.Segment, loc *time.Location) []WeekPoint
 	return out
 }
 
-func tripPoints(seq int, group []domain.Segment, summary stats.Summary) []TripPoint {
+func tripPoints(seq int, group []domain.Segment, summary stats.Summary, loc *time.Location) []TripPoint {
 	out := make([]TripPoint, 0, len(group))
 	for _, sg := range group {
 		if sg.DurationS == nil {
@@ -236,6 +240,7 @@ func tripPoints(seq int, group []domain.Segment, summary stats.Summary) []TripPo
 			TripID:    sg.TripID,
 			Date:      sg.LocalDate,
 			Hour:      sg.LocalHour,
+			LocalTime: sg.StartedAt.In(loc).Format("2006-01-02T15:04:05"),
 			Direction: string(sg.Direction),
 			DurationS: *sg.DurationS,
 			Outlier:   stats.IsOutlier(*sg.DurationS, summary),

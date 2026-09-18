@@ -438,3 +438,50 @@ func TestMigrations_DeactivateExistingDuplicates(t *testing.T) {
 		t.Errorf("kept %q active, want the oldest route %q", tmpl.Name, "first")
 	}
 }
+
+func TestReplaceRoute(t *testing.T) {
+	s := newTestStore(t)
+	before := seedRoute(t, s, "A", "B", "C")
+
+	got, err := s.ReplaceRoute(t.Context(), "Restored", []domain.Waypoint{
+		{Label: "X", Lat: 13.7, Lon: -89.2, RadiusM: 30},
+		{Label: "Y", Lat: 13.8, Lon: -89.3, RadiusM: 20, Optional: true},
+	})
+	if err != nil {
+		t.Fatalf("ReplaceRoute returned %v", err)
+	}
+	if got.ID != before.ID {
+		t.Errorf("route ID = %s, want the existing route %s", got.ID, before.ID)
+	}
+	if got.Name != "Restored" {
+		t.Errorf("name = %q, want %q", got.Name, "Restored")
+	}
+	if got.Version <= before.Version {
+		t.Errorf("version = %d, want more than %d so trips are recomputed", got.Version, before.Version)
+	}
+	if len(got.Waypoints) != 2 {
+		t.Fatalf("got %d waypoints, want 2", len(got.Waypoints))
+	}
+	for i, want := range []string{"X", "Y"} {
+		if w := got.Waypoints[i]; w.Label != want || w.Seq != i {
+			t.Errorf("waypoint %d = %s at seq %d, want %s at seq %d", i, w.Label, w.Seq, want, i)
+		}
+	}
+	if !got.Waypoints[1].Optional {
+		t.Error("optional flag was not kept")
+	}
+}
+
+func TestReplaceRoute_CreatesTheRouteWhenThereIsNone(t *testing.T) {
+	s := newTestStore(t)
+	got, err := s.ReplaceRoute(t.Context(), "Restored", []domain.Waypoint{
+		{Label: "X", Lat: 13.7, Lon: -89.2, RadiusM: 30},
+		{Label: "Y", Lat: 13.8, Lon: -89.3, RadiusM: 20},
+	})
+	if err != nil {
+		t.Fatalf("ReplaceRoute returned %v", err)
+	}
+	if got.Name != "Restored" || len(got.Waypoints) != 2 {
+		t.Errorf("got route %q with %d waypoints, want %q with 2", got.Name, len(got.Waypoints), "Restored")
+	}
+}
