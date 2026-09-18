@@ -3,8 +3,12 @@ package web
 import (
 	"errors"
 	"net/http"
+	"net/url"
+	"strconv"
+	"time"
 
 	"github.com/oscarcalderonc/routine-routes-tracker/internal/domain"
+	"github.com/oscarcalderonc/routine-routes-tracker/internal/service"
 	"github.com/oscarcalderonc/routine-routes-tracker/internal/storage"
 )
 
@@ -203,4 +207,61 @@ func waypointFromForm(r *http.Request) (domain.Waypoint, error) {
 		RadiusM:  radius,
 		Optional: r.FormValue("optional") != "",
 	}, nil
+}
+
+// maxRouteCSVBytes bounds an uploaded route backup. A route of a few dozen
+// waypoints is a couple of kilobytes; anything near this is not a backup.
+const maxRouteCSVBytes = 1 << 20
+
+// exportRoute downloads the active route's definition as CSV, as a backup
+// that importRoute can restore.
+func (s *Server) exportRoute(w http.ResponseWriter, r *http.Request) {
+	route, err := s.svc.Store().ActiveTemplate(r.Context())
+	if errors.Is(err, storage.ErrNotFound) {
+		http.Error(w, "no route has been defined yet", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+
+	name := "route-" + time.Now().In(s.svc.Location()).Format(time.DateOnly) + ".csv"
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="`+name+`"`)
+	if err := service.WriteRouteCSV(w, route); err != nil {
+		// The response has begun, so all that is left is to record it.
+		s.log.Error("could not write route export", "error", err)
+	}
+}
+
+// importRoute replaces the active route with the one in an uploaded backup.
+//
+// A file that cannot be read is reported on the dashboard rather than as a bare
+// error page, because the likeliest cause is choosing the wrong file.
+func (s *Server) importRoute(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxRouteCSVBytes)
+	file, _, err := r.FormFile("file")
+	if err != nil {
+		redirect(w, r, "/?import_error="+url.QueryEscape("no readable file was uploaded"))
+		return
+	}
+	defer file.Close()
+
+	name, wps, err := service.ReadRouteCSV(file)
+	if err != nil {
+		redirect(w, r, "/?import_error="+url.QueryEscape(err.Error()))
+		return
+	}
+	if _, err := s.svc.Store().ReplaceRoute(r.Context(), name, wps); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+
+	go func() {
+		if err := s.svc.Reprocess(s.background); err != nil {
+			s.log.Error("recompute after route import failed", "error", err)
+		}
+	}()
+	redirect(w, r, "/?imported="+strconv.Itoa(len(wps)))
 }

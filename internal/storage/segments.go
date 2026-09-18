@@ -19,7 +19,7 @@ type SegmentQuery struct {
 }
 
 // Segments returns the completed measurements matching a query, ordered by
-// stretch and then by date.
+// stretch and then by when each was driven.
 //
 // Only the rows are fetched; the summarising happens in Go. At this data volume
 // there is nothing to gain from aggregating in SQL, and doing it in Go keeps
@@ -45,7 +45,7 @@ func (s *Store) Segments(ctx context.Context, q SegmentQuery) ([]domain.Segment,
 		sql += ` AND direction = ?`
 		args = append(args, string(q.Direction))
 	}
-	sql += ` ORDER BY seq, local_date`
+	sql += ` ORDER BY seq, started_at`
 
 	rows, err := s.db.QueryContext(ctx, sql, args...)
 	if err != nil {

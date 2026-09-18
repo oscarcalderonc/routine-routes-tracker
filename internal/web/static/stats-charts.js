@@ -83,6 +83,13 @@
 
   const tripsCanvas = document.getElementById('trips-chart');
   if (tripsCanvas && report.trips && report.trips.length) {
+    // local_time is wall-clock time in the reporting timezone. It is read as
+    // if it were UTC and formatted back as UTC, so the axis shows the times the
+    // tables show whatever timezone the browser is in.
+    function at(t) { return Date.parse(t.local_time + 'Z'); }
+    function day(ms) { return new Date(ms).toISOString().slice(0, 10); }
+    function clock(ms) { return new Date(ms).toISOString().slice(11, 16); }
+
     const datasets = report.segments.map(function (seg, i) {
       const colour = palette[i % palette.length];
       return {
@@ -90,10 +97,17 @@
         data: report.trips
           .filter(function (t) { return t.seq === seg.seq; })
           .map(function (t) {
-            return { x: t.date, y: minutes(t.duration_s), outlier: t.outlier, dir: t.direction };
-          }),
+            return { x: at(t), y: minutes(t.duration_s), outlier: t.outlier, dir: t.direction };
+          })
+          .sort(function (a, b) { return a.x - b.x; }),
         backgroundColor: colour,
         borderColor: colour,
+        // The line joins each stretch's journeys in the order they were
+        // driven, so a trend reads at a glance; the points stay, because each
+        // is a real journey.
+        showLine: true,
+        borderWidth: 1.5,
+        tension: 0,
         // Unusual journeys are drawn larger and hollow rather than dropped.
         pointRadius: function (ctx) { return ctx.raw && ctx.raw.outlier ? 7 : 3.5; },
         pointStyle: function (ctx) { return ctx.raw && ctx.raw.outlier ? 'triangle' : 'circle'; },
@@ -107,12 +121,19 @@
         responsive: true,
         scales: {
           y: durationAxis('Time taken'),
-          x: { type: 'category', grid: { color: grid } },
+          x: {
+            type: 'linear',
+            grid: { color: grid },
+            ticks: { maxTicksLimit: 10, callback: function (v) { return day(v); } },
+          },
         },
         plugins: {
           legend: { position: 'bottom' },
           tooltip: {
             callbacks: {
+              title: function (items) {
+                return items.length ? day(items[0].raw.x) + ' ' + clock(items[0].raw.x) : '';
+              },
               label: function (ctx) {
                 const p = ctx.raw;
                 const mins = Math.floor(p.y);

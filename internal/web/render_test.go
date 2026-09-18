@@ -69,7 +69,7 @@ func TestRenderPages(t *testing.T) {
 			{Seq: 0, Hour: 12, Count: 2, MedianS: 200, RelativeToBest: 1.0, Sparse: true},
 		},
 		Weeks: []service.WeekPoint{{Seq: 0, Week: "2026-W37", MedianS: 212, Count: 4}},
-		Trips: []service.TripPoint{{Seq: 0, TripID: "trip1", Date: "2026-09-09", DurationS: 212}},
+		Trips: []service.TripPoint{{Seq: 0, TripID: "trip1", Date: "2026-09-09", LocalTime: "2026-09-09T07:42:10", DurationS: 212}},
 	}
 
 	pages := map[string]map[string]any{
@@ -84,6 +84,7 @@ func TestRenderPages(t *testing.T) {
 			"DriveConfigured": true, "From": "2026-06-01", "To": "2026-09-09",
 			"Progress": service.Progress{}, "Location": "America/El_Salvador",
 			"Initialised": time.Now(), "Ephemeral": true,
+			"Imported": "4", "ImportError": "line 3: lat must be a number between -90 and 90",
 		},
 		"trips.gohtml": {
 			"Title": "Trips", "Nav": "trips", "Trips": []domain.Trip{trip},

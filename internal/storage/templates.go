@@ -237,6 +237,58 @@ func (s *Store) MoveWaypoint(ctx context.Context, templateID, waypointID string,
 	})
 }
 
+// ReplaceRoute makes the active route consist of exactly the given waypoints,
+// in the order given, creating the route if there is none. It is how a route
+// restored from a backup takes effect.
+//
+// Everything happens in one transaction so that a failure part-way leaves the
+// previous route intact rather than half of each. The existing waypoints are
+// deleted rather than matched up with the new ones: their crossings go with
+// them, and the version bump then rebuilds every trip against the new
+// geometry, as any other edit would.
+func (s *Store) ReplaceRoute(ctx context.Context, name string, wps []domain.Waypoint) (domain.Template, error) {
+	now := time.Now().UTC()
+	err := s.inTx(ctx, func(tx *sql.Tx) error {
+		var id string
+		err := tx.QueryRowContext(ctx,
+			`SELECT id FROM route_templates WHERE active = 1 ORDER BY created_at LIMIT 1`).Scan(&id)
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			id = domain.NewID()
+			if _, err := tx.ExecContext(ctx,
+				`INSERT INTO route_templates (id, name, active, version, created_at, updated_at)
+				VALUES (?, ?, 1, 1, ?, ?)`, id, name, formatTime(now), formatTime(now)); err != nil {
+				return fmt.Errorf("insert template: %w", err)
+			}
+		case err != nil:
+			return fmt.Errorf("find active template: %w", err)
+		default:
+			if _, err := tx.ExecContext(ctx,
+				`UPDATE route_templates SET name = ? WHERE id = ?`, name, id); err != nil {
+				return fmt.Errorf("rename template: %w", err)
+			}
+		}
+
+		if _, err := tx.ExecContext(ctx, `DELETE FROM waypoints WHERE template_id = ?`, id); err != nil {
+			return fmt.Errorf("clear waypoints: %w", err)
+		}
+		const q = `INSERT INTO waypoints
+			(id, template_id, seq, label, lat, lon, radius_m, optional, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		for i, w := range wps {
+			if _, err := tx.ExecContext(ctx, q, domain.NewID(), id, i, w.Label, w.Lat, w.Lon,
+				w.RadiusM, w.Optional, formatTime(now), formatTime(now)); err != nil {
+				return fmt.Errorf("insert waypoint: %w", err)
+			}
+		}
+		return bumpVersion(ctx, tx, id, now)
+	})
+	if err != nil {
+		return domain.Template{}, err
+	}
+	return s.ActiveTemplate(ctx)
+}
+
 // bumpVersion records that a route's geometry changed. Every trip carries the
 // version it was measured against, so raising it is what marks existing trips
 // for recomputation.
