@@ -13,6 +13,24 @@
 </section>
 {{end}}
 
+{{if .ImportError}}
+<section class="card danger-notice">
+  <h2>The route backup was not restored</h2>
+  <p>{{.ImportError}}. The route is unchanged.</p>
+</section>
+{{end}}
+
+{{if .Imported}}
+<section class="card notice">
+  <h2>Route restored</h2>
+  <p>
+    {{.Imported}} waypoints were loaded from the backup and stored trips are being
+    recomputed against them. Press <strong>Refresh</strong> to import any recordings the
+    database no longer knows about.
+  </p>
+</section>
+{{end}}
+
 {{if not .RouteDefined}}
 <section class="card notice">
   <h2>Define the route first</h2>
@@ -22,6 +40,7 @@
     drive rather than at your front door — a waypoint at home measures how long
     you spent finding your phone, not how long the drive took.
   </p>
+  <p>If the route was lost, restore it from a backup under <a href="#route-backup">Route backup</a>.</p>
 </section>
 {{end}}
 
@@ -125,5 +144,26 @@
   {{else}}
   <p class="muted">Nothing imported yet.</p>
   {{end}}
+</section>
+<section class="card" id="route-backup">
+  <h2>Route backup</h2>
+  <p class="muted">
+    The route and every waypoint's position, radius and optionality, as a CSV file.
+    Restoring one replaces the current waypoints. Trips are not in the file: they are
+    measured from the recordings, so after a restore press <strong>Refresh</strong> and
+    they are rebuilt.
+  </p>
+  <div class="row between">
+    {{if .Route.Waypoints}}
+    <a class="button" href="/route/export.csv" download>Export CSV</a>
+    {{else}}
+    <span class="muted small">No route to export yet.</span>
+    {{end}}
+    <form method="post" action="/route/import" enctype="multipart/form-data" class="row"
+          {{if .Route.Waypoints}}onsubmit="return confirm('Replace the current waypoints with the ones in this file? Stored trips will be recomputed.')"{{end}}>
+      <input type="file" name="file" accept=".csv,text/csv" required>
+      <button type="submit">Import CSV</button>
+    </form>
+  </div>
 </section>
 {{end}}

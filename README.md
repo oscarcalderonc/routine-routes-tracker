@@ -159,6 +159,16 @@ truth, so this is always safe and takes a couple of seconds. Trips are never
 pinned to an old route version — a chart mixing stretches measured against
 different geometry would be worse than useless.
 
+### Backing up the route
+
+The dashboard's **Route backup** card exports the route as a CSV file — one row
+per waypoint with its label, position, radius and whether it is optional — and
+imports such a file back, replacing the current waypoints. Only the route is in
+the file: trips are measured from the recordings, so after restoring into an
+empty database press **Refresh** and they are imported and measured again. The
+file can be edited in a spreadsheet; columns are found by name and rows are
+ordered by their `seq` column.
+
 ## Configuration
 
 Everything is read from the environment.

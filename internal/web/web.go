@@ -70,6 +70,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /route/waypoints/{id}", s.updateWaypoint)
 	mux.HandleFunc("POST /route/waypoints/{id}/delete", s.deleteWaypoint)
 	mux.HandleFunc("POST /route/waypoints/{id}/move", s.moveWaypoint)
+	mux.HandleFunc("GET /route/export.csv", s.exportRoute)
+	mux.HandleFunc("POST /route/import", s.importRoute)
 
 	mux.HandleFunc("GET /stats", s.showStats)
 	mux.HandleFunc("GET /api/stats.json", s.statsJSON)
@@ -144,6 +146,9 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 		"Location":        s.svc.Location().String(),
 		"Initialised":     initialised,
 		"Ephemeral":       s.opts.StorageEphemeral,
+		// Set after a route backup was restored, or failed to be.
+		"Imported":    r.URL.Query().Get("imported"),
+		"ImportError": r.URL.Query().Get("import_error"),
 	})
 }
 
